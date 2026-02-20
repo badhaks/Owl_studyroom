@@ -421,7 +421,7 @@ export default function App() {
           .detail-header { flex-direction: column !important; align-items: flex-start !important; gap: 12px !important; }
           .detail-action-btns { display: flex; gap: 8px; flex-wrap: wrap; }
 
-          /* HAKS 컨센서스 그리드 */
+          /* 컨센서스 그리드 */
           .consensus-grid { grid-template-columns: 1fr !important; gap: 8px !important; }
 
           /* AI 분석 depth 선택 */
@@ -1612,7 +1612,7 @@ function ConsensusSection({ ticker, market, ourFairValue, currentPrice, currency
     <div className="card" style={{ padding: "20px", marginBottom: 16 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
         <div>
-          <div className="section-label" style={{ margin: 0 }}>📊 HAKS 컨센서스 비교</div>
+          <div className="section-label" style={{ margin: 0 }}>📊 컨센서스 비교</div>
           {data?.fetchedAt && <div style={{ fontSize: 9, color: "#556677", marginTop: 2 }}>네이버 금융 기준 · {data.fetchedAt}</div>}
         </div>
         <button className="btn-outline" style={{ fontSize: 10, padding: "4px 12px" }} onClick={fetchConsensus} disabled={loading}>
@@ -1634,7 +1634,7 @@ function ConsensusSection({ ticker, market, ourFairValue, currentPrice, currency
               </div>
             </div>
             <div style={{ background: "#0a0d14", borderRadius: 6, padding: "12px 14px", border: "1px solid #3498db44" }}>
-              <div style={{ fontSize: 9, color: "#3498db", letterSpacing: 1, marginBottom: 4 }}>HAKS 컨센서스</div>
+              <div style={{ fontSize: 9, color: "#3498db", letterSpacing: 1, marginBottom: 4 }}>컨센서스</div>
               <div style={{ fontSize: 18, fontWeight: 500, color: "#e8eaf6" }}>{data.consensusTargetPrice ? data.consensusTargetPrice.toLocaleString() : "—"}</div>
               <div style={{ fontSize: 10, color: consUpside ? (parseFloat(consUpside) > 0 ? "#00d27a" : "#e74c3c") : "#556677" }}>
                 {consUpside ? `${parseFloat(consUpside) > 0 ? "+" : ""}${consUpside}%` : "—"}
