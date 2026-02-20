@@ -4,20 +4,26 @@ import React, { useState, useEffect, useRef } from "react";
 // For KR stocks use ticker like "005930.KS" (Samsung)
 async function fetchLivePrice(ticker, market, apiKey) {
   if (!apiKey) return null;
-  // Alpha Vantage symbol formats
+  // Build Yahoo Finance style symbol
   const suffixMap = { KR: ".KS", HK: ".HK", TW: ".TW", CN_SH: ".SS", CN_SZ: ".SZ" };
   const suffix = suffixMap[market] || "";
-  // KR: pad to 6 digits for Yahoo/AV format
   const t = market === "KR" ? ticker.padStart(6, "0") : ticker;
   const symbol = suffix ? `${t}${suffix}` : t;
-  const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${apiKey}`;
+
+  // Try Alpha Vantage
   try {
+    const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${encodeURIComponent(symbol)}&apikey=${apiKey}`;
     const res = await fetch(url);
     const data = await res.json();
+    // Check for rate limit message
+    if (data?.Note || data?.Information) {
+      console.warn("Alpha Vantage rate limit hit:", data.Note || data.Information);
+      return null;
+    }
     const price = parseFloat(data?.["Global Quote"]?.["05. price"]);
     if (!isNaN(price) && price > 0) return price;
-    return null;
-  } catch { return null; }
+  } catch (e) { console.error("AV fetch error:", e); }
+  return null;
 }
 
 const INITIAL_STOCKS = [
@@ -135,43 +141,29 @@ const EMPTY_STOCK = {
   history: [],
 };
 
-function getTVSymbol(ticker, market, exchange) {
-  // TradingView specific symbol formats
+function getTVSymbol(ticker, market) {
   if (market === "KR") return `KRX:${ticker}`;
-  if (market === "HK") return `HKEX:${parseInt(ticker, 10)}`; // remove leading zeros
+  if (market === "HK") return `HKEX:${parseInt(ticker, 10)}`;
   if (market === "TW") return `TWSE:${ticker}`;
   if (market === "CN_SH") return `SSE:${ticker}`;
   if (market === "CN_SZ") return `SZSE:${ticker}`;
-  // US - use exchange directly
-  const exMap = { NASDAQ: "NASDAQ", NYSE: "NYSE", AMEX: "AMEX" };
-  const prefix = exMap[exchange] || "NASDAQ";
-  return `${prefix}:${ticker}`;
+  return ticker; // US: just ticker, TradingView auto-resolves
 }
 
 function TradingViewWidget({ ticker, market, exchange }) {
-  const ref = useRef(null);
-  const symbol = getTVSymbol(ticker, market, exchange);
-  useEffect(() => {
-    if (!ref.current) return;
-    ref.current.innerHTML = "";
-    const container = document.createElement("div");
-    container.className = "tradingview-widget-container__widget";
-    ref.current.appendChild(container);
-    const script = document.createElement("script");
-    script.src = "https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js";
-    script.async = true;
-    script.innerHTML = JSON.stringify({
-      autosize: true, symbol, interval: "D", timezone: "Asia/Seoul",
-      theme: "dark", style: "1", locale: "kr",
-      backgroundColor: "#0f1420", gridColor: "#1e2535",
-      allow_symbol_change: false, save_image: false,
-      studies: ["STD;RSI@tv-basicstudies", "STD;MACD@tv-basicstudies"],
-      show_popup_button: false, height: 480,
-    });
-    ref.current.appendChild(script);
-    return () => { if (ref.current) ref.current.innerHTML = ""; };
-  }, [symbol]);
-  return <div ref={ref} style={{ width:"100%", height:480, borderRadius:6, overflow:"hidden" }} />;
+  const symbol = getTVSymbol(ticker, market);
+  const src = `https://www.tradingview.com/widgetembed/?frameElementId=tv_chart&symbol=${encodeURIComponent(symbol)}&interval=D&hidesidetoolbar=0&symboledit=0&saveimage=0&toolbarbg=0f1420&studies=RSI%40tv-basicstudies%1FMACD%40tv-basicstudies&theme=dark&style=1&timezone=Asia%2FSeoul&withdateranges=1&showpopupbutton=0&locale=kr&utm_source=owl-studyroom.vercel.app`;
+  return (
+    <div style={{ width: "100%", height: 500, borderRadius: 6, overflow: "hidden", background: "#0f1420" }}>
+      <iframe
+        src={src}
+        style={{ width: "100%", height: "100%", border: "none" }}
+        allowTransparency
+        allowFullScreen
+        title={`${ticker} Chart`}
+      />
+    </div>
+  );
 }
 
 export default function App() {
@@ -234,7 +226,7 @@ export default function App() {
         statusMap[s.id] = "fail";
       }
       setRefreshStatus({ ...statusMap });
-      // Avoid rate limit (5 req/min on free plan)
+      // Alpha Vantage 무료 플랜: 분당 5건 제한 → 13초 간격
       if (i < updated.length - 1) await new Promise(r => setTimeout(r, 13000));
     }
     await save(updated);
@@ -743,7 +735,7 @@ export default function App() {
             <div className="card" style={{ padding: "20px", marginBottom: 16 }}>
               <div className="section-label">📈 기술적 분석 차트 (이평선 · RSI · MACD)</div>
               <div style={{ fontSize: 10, color: "#556677", marginBottom: 12 }}>TradingView 제공 · 실시간 캔들차트</div>
-              <TradingViewWidget ticker={selected.ticker} market={selected.market} exchange={selected.exchange} />
+              <TradingViewWidget ticker={selected.ticker} market={selected.market} />
             </div>
 
             {/* PORTFOLIO TRACKING */}
