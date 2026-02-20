@@ -164,20 +164,35 @@ function ChartLinks({ ticker, market }) {
 export default function App() {
   // ── 접근 제어 ─────────────────────────────────────────────────
   // 키 목록 — 여기서 관리
-  const ADMIN_KEYS = ["haks-owner"];          // 관리자: 모든 기능
-  const GUEST_KEYS = ["haks-guest1", "haks-guest2", "haks-guest3"]; // 게스트: 보기만
+  const ADMIN_KEYS = ["haks-owner"];
+  const GUEST_KEYS = ["haks-guest1", "haks-guest2", "haks-guest3"];
+  const OWNER_PW   = "haks2026";
+  const ALL_KEYS   = [...ADMIN_KEYS, ...GUEST_KEYS];
 
   const detectAuth = () => {
     try {
-      const urlKey = new URLSearchParams(window.location.search).get("key");
-      if (urlKey) {
-        if (ADMIN_KEYS.includes(urlKey)) { localStorage.setItem("owl_auth_key", urlKey); window.history.replaceState({}, "", window.location.pathname); return "admin"; }
-        if (GUEST_KEYS.includes(urlKey)) { localStorage.setItem("owl_auth_key", urlKey); window.history.replaceState({}, "", window.location.pathname); return "guest"; }
+      // 1) URL 파라미터 확인 (?key=xxx) — 매번 체크
+      const params = new URLSearchParams(window.location.search);
+      const urlKey = params.get("key");
+      if (urlKey && ALL_KEYS.includes(urlKey)) {
+        // localStorage + sessionStorage 둘 다 저장
+        try { localStorage.setItem("owl_auth_key", urlKey); } catch {}
+        try { sessionStorage.setItem("owl_auth_key", urlKey); } catch {}
+        // URL에서 key 제거
+        window.history.replaceState({}, "", window.location.pathname);
+        return ADMIN_KEYS.includes(urlKey) ? "admin" : "guest";
       }
-      const saved = localStorage.getItem("owl_auth_key");
-      if (ADMIN_KEYS.includes(saved)) return "admin";
-      if (GUEST_KEYS.includes(saved)) return "guest";
-    } catch {}
+      // 2) sessionStorage (탭 세션 유지)
+      const ss = sessionStorage.getItem("owl_auth_key");
+      if (ss && ALL_KEYS.includes(ss)) return ADMIN_KEYS.includes(ss) ? "admin" : "guest";
+      // 3) localStorage (브라우저 영구 저장)
+      const ls = localStorage.getItem("owl_auth_key");
+      if (ls && ALL_KEYS.includes(ls)) {
+        // localStorage에 있으면 sessionStorage에도 복사
+        try { sessionStorage.setItem("owl_auth_key", ls); } catch {}
+        return ADMIN_KEYS.includes(ls) ? "admin" : "guest";
+      }
+    } catch(e) { console.error("Auth error:", e); }
     return null;
   };
 
@@ -192,6 +207,7 @@ export default function App() {
   const handleLogin = () => {
     if (pwInput === OWNER_PW) {
       try { localStorage.setItem("owl_auth_key", "haks-owner"); } catch {}
+      try { sessionStorage.setItem("owl_auth_key", "haks-owner"); } catch {}
       setRole("admin"); setPwError(false);
     } else { setPwError(true); setTimeout(() => setPwError(false), 1500); }
   };
