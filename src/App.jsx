@@ -186,12 +186,12 @@ export default function App() {
   useEffect(() => {
     (async () => {
       try {
-        const r = await window.storage.get("stocks_v1");
-        if (r && r.value) setStocks(JSON.parse(r.value));
-        const k = await window.storage.get("av_api_key");
-        if (k && k.value) { setApiKey(k.value); setApiKeyInput(k.value); }
-        const ak = await window.storage.get("anthropic_key");
-        if (ak && ak.value) { setAnthropicKey(ak.value); setAnthropicKeyInput(ak.value); }
+        const r = localStorage.getItem("stocks_v1");
+        if (r) setStocks(JSON.parse(r));
+        const k = localStorage.getItem("av_api_key");
+        if (k) { setApiKey(k); setApiKeyInput(k); }
+        const ak = localStorage.getItem("anthropic_key");
+        if (ak) { setAnthropicKey(ak); setAnthropicKeyInput(ak); }
       } catch {}
       setLoaded(true);
     })();
@@ -199,12 +199,12 @@ export default function App() {
 
   const saveApiKey = async () => {
     setApiKey(apiKeyInput);
-    try { await window.storage.set("av_api_key", apiKeyInput); } catch {}
+    try { localStorage.setItem("av_api_key", apiKeyInput); } catch {}
   };
 
   const saveAnthropicKey = async () => {
     setAnthropicKey(anthropicKeyInput);
-    try { await window.storage.set("anthropic_key", anthropicKeyInput); } catch {}
+    try { localStorage.setItem("anthropic_key", anthropicKeyInput); } catch {}
   };
 
   const refreshAllPrices = async () => {
@@ -248,7 +248,7 @@ export default function App() {
 
   const save = async (newStocks) => {
     setStocks(newStocks);
-    try { await window.storage.set("stocks_v1", JSON.stringify(newStocks)); } catch {}
+    try { localStorage.setItem("stocks_v1", JSON.stringify(newStocks)); } catch {}
   };
 
   const filtered = stocks.filter(s => {
@@ -842,7 +842,7 @@ function StockForm({ stock, isEdit, onSave, onCancel, anthropicKey }) {
       setParseSuccess(true);
       setPasteText("");
     } catch (e) {
-      setParseError("파싱 실패. API 키를 확인하거나 텍스트를 다시 붙여넣어 주세요.");
+      setParseError(`실패: ${e.message || "API 키를 확인하거나 잠시 후 다시 시도해주세요."}`);
     }
     setParsing(false);
   };
