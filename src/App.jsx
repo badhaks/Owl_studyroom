@@ -130,104 +130,31 @@ const EMPTY_STOCK = {
   history: [],
 };
 
-function getTVSymbol(ticker, market) {
-  if (market === "HK") return `HKEX:${parseInt(ticker, 10)}`;
-  if (market === "TW") return `TWSE:${ticker}`;
-  if (market === "CN_SH") return `SSE:${ticker}`;
-  if (market === "CN_SZ") return `SZSE:${ticker}`;
-  return ticker;
-}
-
-const PERIODS_KR = [
-  { label: "일", value: "day" },
-  { label: "주", value: "week" },
-  { label: "월", value: "month" },
-  { label: "연", value: "year" },
-];
-
-const PERIODS_TV = [
-  { label: "일", range: "1m|1D" },
-  { label: "주", range: "3m|1W" },
-  { label: "월", range: "12m|1M" },
-  { label: "연", range: "60m|1M" },
-];
-
-function PeriodButtons({ periods, selected, onSelect }) {
+function ChartLinks({ ticker, market }) {
+  const code = market === "KR" ? ticker.padStart(6, "0") : ticker;
+  const links = market === "KR"
+    ? [
+        { label: "📈 네이버 금융", url: `https://finance.naver.com/item/main.naver?code=${code}` },
+        { label: "📊 TradingView", url: `https://kr.tradingview.com/chart/?symbol=KRX:${code}` },
+        { label: "🔍 Investing.com", url: `https://kr.investing.com/search/?q=${ticker}` },
+      ]
+    : [
+        { label: "📈 TradingView", url: `https://kr.tradingview.com/chart/?symbol=${ticker}` },
+        { label: "📊 Yahoo Finance", url: `https://finance.yahoo.com/quote/${ticker}` },
+        { label: "🔍 Seeking Alpha", url: `https://seekingalpha.com/symbol/${ticker}` },
+      ];
   return (
-    <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
-      {periods.map(p => (
-        <button key={p.label} onClick={() => onSelect(p)}
-          style={{ background: selected.label === p.label ? "#f5a623" : "transparent", color: selected.label === p.label ? "#0a0d14" : "#8899aa", border: `1px solid ${selected.label === p.label ? "#f5a623" : "#1e2535"}`, padding: "4px 14px", fontSize: 12, borderRadius: 3, cursor: "pointer", fontFamily: "DM Mono, monospace" }}>
-          {p.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function TradingViewWidget({ ticker, market }) {
-  const ref = useRef(null);
-  const [period, setPeriod] = useState(market === "KR" ? PERIODS_KR[0] : PERIODS_TV[0]);
-
-  // Korean stocks → Naver Finance iframe
-  if (market === "KR") {
-    const code = ticker.padStart(6, "0");
-    const periodMap = { day: "day", week: "week", month: "month", year: "year" };
-    const naverUrl = `https://finance.naver.com/item/fchart.naver?code=${code}&timeframe=${periodMap[period.value]}`;
-    return (
-      <div style={{ width: "100%" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-          <PeriodButtons periods={PERIODS_KR} selected={period} onSelect={setPeriod} />
-          <a href={`https://finance.naver.com/item/main.naver?code=${code}`} target="_blank" rel="noreferrer"
-            style={{ fontSize: 10, color: "#f5a623", textDecoration: "none" }}>네이버에서 보기 →</a>
-        </div>
-        <iframe key={`${ticker}-${period.value}`} src={naverUrl}
-          style={{ width: "100%", height: 480, border: "none", borderRadius: 6 }}
-          title={`${ticker} 차트`} />
+    <div className="card" style={{ padding: "20px", marginBottom: 16 }}>
+      <div className="section-label">📈 차트 바로가기</div>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        {links.map(l => (
+          <a key={l.label} href={l.url} target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>
+            <button className="btn-outline" style={{ fontSize: 13, padding: "10px 20px" }}>{l.label}</button>
+          </a>
+        ))}
       </div>
-    );
-  }
-
-  // US / HK / TW / CN → TradingView
-  const symbol = getTVSymbol(ticker, market);
-  useEffect(() => {
-    if (!ref.current) return;
-    ref.current.innerHTML = "";
-    const script = document.createElement("script");
-    script.type = "text/javascript";
-    script.src = "https://s3.tradingview.com/external-embedding/embed-widget-symbol-overview.js";
-    script.async = true;
-    script.innerHTML = JSON.stringify({
-      symbols: [[symbol]],
-      chartOnly: false,
-      width: "100%",
-      height: 420,
-      locale: "kr",
-      colorTheme: "dark",
-      autosize: true,
-      showVolume: true,
-      showMA: true,
-      hideDateRanges: false,
-      scalePosition: "right",
-      scaleMode: "Normal",
-      noTimeScale: false,
-      valuesTracking: "1",
-      changeMode: "price-and-percent",
-      chartType: "candlesticks",
-      maLineColor: "#f5a623",
-      maLineWidth: 1,
-      maLength: 20,
-      backgroundColor: "rgba(9, 13, 20, 1)",
-      dateRanges: [period.range],
-    });
-    ref.current.appendChild(script);
-  }, [symbol, period]);
-
-  return (
-    <div style={{ width: "100%" }}>
-      <PeriodButtons periods={PERIODS_TV} selected={period} onSelect={setPeriod} />
-      <div className="tradingview-widget-container" ref={ref} style={{ width: "100%", height: 420 }}>
-        <div className="tradingview-widget-container__widget" />
+      <div style={{ fontSize: 10, color: "#556677", marginTop: 10 }}>
+        클릭하면 새 탭에서 열려요 · 일봉/주봉/보조지표 자유롭게 확인 가능
       </div>
     </div>
   );
@@ -798,12 +725,8 @@ export default function App() {
               )}
             </div>
 
-            {/* TRADINGVIEW CHART */}
-            <div className="card" style={{ padding: "20px", marginBottom: 16 }}>
-              <div className="section-label">📈 기술적 분석 차트 (이평선 · RSI · MACD)</div>
-              <div style={{ fontSize: 10, color: "#556677", marginBottom: 12 }}>TradingView 제공 · 실시간 캔들차트</div>
-              <TradingViewWidget ticker={selected.ticker} market={selected.market} />
-            </div>
+            {/* CHART LINKS */}
+            <ChartLinks ticker={selected.ticker} market={selected.market} />
 
             {/* PORTFOLIO TRACKING */}
             <PortfolioSection stock={selected} currency={selected.currency} onSave={async (buyPrice, quantity) => {
@@ -1156,42 +1079,24 @@ function PortfolioSection({ stock, currency, onSave }) {
 // ── NEWS FEED ──────────────────────────────────────────────────────
 function NewsFeed({ ticker, name }) {
   const [news, setNews] = useState([]);
+  const [fallbackLinks, setFallbackLinks] = useState([]);
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
-  const [error, setError] = useState("");
 
   const fetchNews = async () => {
-    setLoading(true); setError("");
+    setLoading(true);
     try {
-      const q = encodeURIComponent(`${ticker} ${name} stock`);
-      const url = `https://feeds.finance.yahoo.com/rss/2.0/headline?s=${ticker}&region=US&lang=en-US`;
-      const proxyUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(url)}&count=8`;
-      const res = await fetch(proxyUrl);
+      const res = await fetch("/api/news", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ticker, name }),
+      });
       const data = await res.json();
-      if (data.items && data.items.length > 0) {
-        setNews(data.items.map(item => ({
-          title: item.title,
-          link: item.link,
-          date: new Date(item.pubDate).toLocaleDateString("ko-KR"),
-          source: item.author || "Yahoo Finance",
-        })));
-      } else {
-        // fallback: Google News RSS
-        const gUrl = `https://news.google.com/rss/search?q=${encodeURIComponent(ticker+" stock")}&hl=en-US&gl=US&ceid=US:en`;
-        const gProxy = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(gUrl)}&count=8`;
-        const gRes = await fetch(gProxy);
-        const gData = await gRes.json();
-        if (gData.items) {
-          setNews(gData.items.map(item => ({
-            title: item.title,
-            link: item.link,
-            date: new Date(item.pubDate).toLocaleDateString("ko-KR"),
-            source: item.author || "Google News",
-          })));
-        } else { setError("뉴스를 불러오지 못했어요."); }
-      }
-    } catch { setError("뉴스 로드 실패. 잠시 후 다시 시도해주세요."); }
-    setLoading(false); setLoaded(true);
+      setNews(data.news || []);
+      setFallbackLinks(data.fallbackLinks || []);
+    } catch {}
+    setLoading(false);
+    setLoaded(true);
   };
 
   return (
@@ -1202,12 +1107,27 @@ function NewsFeed({ ticker, name }) {
           {loading ? "⟳ 로딩중..." : loaded ? "⟳ 새로고침" : "뉴스 불러오기"}
         </button>
       </div>
-      {!loaded && !loading && <div style={{ fontSize:12, color:"#556677", textAlign:"center", padding:"16px 0" }}>버튼을 눌러 {ticker} 관련 최신 뉴스를 확인하세요</div>}
+      {!loaded && !loading && (
+        <div style={{ fontSize:12, color:"#556677", textAlign:"center", padding:"16px 0" }}>
+          버튼을 눌러 {ticker} 관련 최신 뉴스를 확인하세요
+        </div>
+      )}
       {loading && <div style={{ fontSize:12, color:"#f5a623", textAlign:"center", padding:"16px 0" }}>⟳ 뉴스 수집중...</div>}
-      {error && <div style={{ fontSize:12, color:"#e74c3c" }}>{error}</div>}
+      {loaded && news.length === 0 && (
+        <div>
+          <div style={{ fontSize:12, color:"#556677", marginBottom:12 }}>직접 확인해보세요:</div>
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+            {fallbackLinks.map(l => (
+              <a key={l.label} href={l.url} target="_blank" rel="noreferrer" style={{ textDecoration:"none" }}>
+                <button className="btn-ghost" style={{ fontSize:11 }}>{l.label} →</button>
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
       {news.map((item, i) => (
         <a key={i} href={item.link} target="_blank" rel="noreferrer" style={{ display:"block", textDecoration:"none" }}>
-          <div style={{ padding:"10px 0", borderBottom:"1px solid #1e253533", cursor:"pointer" }} className="news-item">
+          <div style={{ padding:"10px 0", borderBottom:"1px solid #1e253533" }}>
             <div style={{ fontSize:12, color:"#c8d0d8", lineHeight:1.5, marginBottom:4 }}>{item.title}</div>
             <div style={{ fontSize:10, color:"#556677" }}>{item.source} · {item.date}</div>
           </div>
