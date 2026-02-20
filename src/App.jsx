@@ -163,71 +163,33 @@ function ChartLinks({ ticker, market }) {
 
 export default function App() {
   // ── 접근 제어 ─────────────────────────────────────────────────
-  // 키 목록 — 여기서 관리
-  const ADMIN_KEYS = ["haks-owner"];
-  const GUEST_KEYS = ["haks-guest1", "haks-guest2", "haks-guest3"];
-  const OWNER_PW   = "haks2026";
-  const ALL_KEYS   = [...ADMIN_KEYS, ...GUEST_KEYS];
+  // 대시보드: 누구나 열람 가능
+  // 관리자: 추가/수정/삭제/AI분석 가능 (?key=haks-admin 또는 비밀번호)
+  const ADMIN_KEYS = ["haks-admin", "haks-owner"];
+  const ADMIN_PW   = "haks2026";
 
-  const detectAuth = () => {
+  const detectAdmin = () => {
     try {
-      // 1) URL 파라미터 확인 (?key=xxx) — 매번 체크
-      const params = new URLSearchParams(window.location.search);
-      const urlKey = params.get("key");
-      if (urlKey && ALL_KEYS.includes(urlKey)) {
-        // localStorage + sessionStorage 둘 다 저장
-        try { localStorage.setItem("owl_auth_key", urlKey); } catch {}
-        try { sessionStorage.setItem("owl_auth_key", urlKey); } catch {}
-        // URL에서 key 제거
+      const urlKey = new URLSearchParams(window.location.search).get("key");
+      if (urlKey && ADMIN_KEYS.includes(urlKey)) {
+        try { localStorage.setItem("owl_ai_key", urlKey); } catch {}
+        try { sessionStorage.setItem("owl_ai_key", urlKey); } catch {}
         window.history.replaceState({}, "", window.location.pathname);
-        return ADMIN_KEYS.includes(urlKey) ? "admin" : "guest";
+        return true;
       }
-      // 2) sessionStorage (탭 세션 유지)
-      const ss = sessionStorage.getItem("owl_auth_key");
-      if (ss && ALL_KEYS.includes(ss)) return ADMIN_KEYS.includes(ss) ? "admin" : "guest";
-      // 3) localStorage (브라우저 영구 저장)
-      const ls = localStorage.getItem("owl_auth_key");
-      if (ls && ALL_KEYS.includes(ls)) {
-        // localStorage에 있으면 sessionStorage에도 복사
-        try { sessionStorage.setItem("owl_auth_key", ls); } catch {}
-        return ADMIN_KEYS.includes(ls) ? "admin" : "guest";
+      const ss = sessionStorage.getItem("owl_ai_key");
+      if (ss && ADMIN_KEYS.includes(ss)) return true;
+      const ls = localStorage.getItem("owl_ai_key");
+      if (ls && ADMIN_KEYS.includes(ls)) {
+        try { sessionStorage.setItem("owl_ai_key", ls); } catch {}
+        return true;
       }
-    } catch(e) { console.error("Auth error:", e); }
-    return null;
+    } catch {}
+    return false;
   };
 
-  const [role, setRole] = useState(() => detectAuth()); // "admin" | "guest" | null
-  const [pwInput, setPwInput] = useState("");
-  const [pwError, setPwError] = useState(false);
-
-  const isAdmin = role === "admin";
-  const isGuest = role === "guest";
-
-  const handleLogin = () => {
-    if (pwInput === OWNER_PW) {
-      try { localStorage.setItem("owl_auth_key", "haks-owner"); } catch {}
-      try { sessionStorage.setItem("owl_auth_key", "haks-owner"); } catch {}
-      setRole("admin"); setPwError(false);
-    } else { setPwError(true); setTimeout(() => setPwError(false), 1500); }
-  };
-
-  if (!role) return (
-    <div style={{ minHeight: "100vh", background: "#080b11", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "DM Mono, monospace" }}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@700;800&display=swap'); *{box-sizing:border-box;margin:0;padding:0;} input{background:#0f1420;border:1px solid #1e2535;color:#e8eaf6;padding:12px 16px;border-radius:4px;font-family:'DM Mono',monospace;font-size:14px;outline:none;width:100%;} input:focus{border-color:#f5a623;}`}</style>
-      <div style={{ textAlign: "center", width: 320 }}>
-        <div style={{ fontFamily: "Syne, sans-serif", fontSize: 28, fontWeight: 800, color: "#f5a623", letterSpacing: 3, marginBottom: 4 }}>ANALYST<span style={{ color: "#e8eaf6" }}>OS</span></div>
-        <div style={{ fontSize: 10, color: "#556677", letterSpacing: 2, marginBottom: 40 }}>PRIVATE RESEARCH DESK</div>
-        <div style={{ background: "#0f1420", border: "1px solid #1e2535", borderRadius: 10, padding: 28 }}>
-          <div style={{ fontSize: 11, color: "#556677", letterSpacing: 2, marginBottom: 6 }}>ADMIN ACCESS</div>
-          <div style={{ fontSize: 10, color: "#556677", marginBottom: 16 }}>게스트는 초대 링크로 접속하세요</div>
-          <input type="password" value={pwInput} onChange={e => setPwInput(e.target.value)} onKeyDown={e => e.key === "Enter" && handleLogin()}
-            placeholder="••••••••" style={{ border: `1px solid ${pwError ? "#e74c3c" : "#1e2535"}`, marginBottom: 12, textAlign: "center", letterSpacing: 4, fontSize: 18 }} autoFocus />
-          {pwError && <div style={{ fontSize: 11, color: "#e74c3c", marginBottom: 10 }}>비밀번호가 틀렸어요</div>}
-          <button onClick={handleLogin} style={{ width: "100%", background: "#f5a623", color: "#0a0d14", border: "none", padding: "12px", fontSize: 12, fontWeight: 600, letterSpacing: 2, borderRadius: 4, cursor: "pointer", fontFamily: "DM Mono, monospace" }}>ACCESS →</button>
-        </div>
-      </div>
-    </div>
-  );
+  const [isAdmin, setIsAdmin] = useState(() => detectAdmin());
+  const isGuest = !isAdmin;
 
   const [stocks, setStocks] = useState(INITIAL_STOCKS);
   const [selected, setSelected] = useState(null);
@@ -520,18 +482,13 @@ export default function App() {
           ) : (
             <><span style={{ width: 6, height: 6, borderRadius: "50%", background: "#556677", display: "inline-block", marginRight: 6 }} /><span style={{ fontSize: 10, color: "#556677" }}>MANUAL</span></>
           )}
-          {view === "dashboard" && isAdmin && (
+          {view === "dashboard" && (
             <>
-              <button className="btn-ghost" style={{ fontSize: 11, padding: "5px 12px" }} onClick={() => setView("settings")}>⚙ API 설정</button>
-              <button className="btn-outline" style={{ fontSize: 11, padding: "5px 12px", opacity: refreshing ? 0.5 : 1 }} onClick={refreshAllPrices} disabled={refreshing}>
-                {refreshing ? "⟳ 갱신중..." : "⟳ 주가 갱신"}
-              </button>
-              <button className="btn-gold" style={{ background: "#9b59b6", borderColor: "#9b59b6" }} onClick={() => setView("ai-analyze")}>🤖 AI 분석</button>
-              <button className="btn-gold" onClick={() => { setEditStock({ ...EMPTY_STOCK, id: Date.now().toString() }); setView("add"); }}>+ ADD STOCK</button>
+              {isAdmin && <button className="btn-ghost" style={{ fontSize: 11, padding: "5px 12px" }} onClick={() => setView("settings")}>⚙ API 설정</button>}
+              {isAdmin && <button className="btn-outline" style={{ fontSize: 11, padding: "5px 12px", opacity: refreshing ? 0.5 : 1 }} onClick={refreshAllPrices} disabled={refreshing}>{refreshing ? "⟳ 갱신중..." : "⟳ 주가 갱신"}</button>}
+              {isAdmin && <button className="btn-gold" style={{ background: "#9b59b6", borderColor: "#9b59b6" }} onClick={() => setView("ai-analyze")}>🤖 AI 분석</button>}
+              {isAdmin && <button className="btn-gold" onClick={() => { setEditStock({ ...EMPTY_STOCK, id: Date.now().toString() }); setView("add"); }}>+ ADD STOCK</button>}
             </>
-          )}
-          {isGuest && (
-            <span style={{ fontSize: 10, color: "#556677", border: "1px solid #1e2535", padding: "4px 10px", borderRadius: 3 }}>👁 READ ONLY</span>
           )}
         </div>
         {/* Mobile: live indicator only */}
@@ -564,19 +521,6 @@ export default function App() {
         {/* DASHBOARD */}
         {view === "dashboard" && (
           <div className="fade-in">
-            {/* Guest banner */}
-            {isGuest && (
-              <div style={{ background: "#1a1a2e", border: "1px solid #3498db44", borderRadius: 8, padding: "10px 16px", marginBottom: 16, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <span style={{ fontSize: 16 }}>👁</span>
-                  <div>
-                    <div style={{ fontSize: 11, color: "#3498db", fontWeight: 500 }}>READ ONLY 모드</div>
-                    <div style={{ fontSize: 10, color: "#556677" }}>분석 열람만 가능합니다 · 수정/추가/삭제 비활성화</div>
-                  </div>
-                </div>
-                <span style={{ fontSize: 9, color: "#556677", border: "1px solid #1e2535", padding: "3px 8px", borderRadius: 3 }}>GUEST</span>
-              </div>
-            )}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, marginBottom: 24 }}>
               {[
                 { label: "TOTAL POSITIONS", value: stocks.length },
@@ -1087,16 +1031,10 @@ export default function App() {
           </div>
         )}
         {/* AI ANALYZE VIEW */}
-        {view === "ai-analyze" && !isAdmin && (
-          <div className="fade-in" style={{ textAlign: "center", padding: "60px 20px" }}>
-            <div style={{ fontSize: 40, marginBottom: 16 }}>🔒</div>
-            <div style={{ fontSize: 16, color: "#e8eaf6", fontFamily: "Syne, sans-serif", fontWeight: 700, marginBottom: 8 }}>관리자 전용 기능</div>
-            <div style={{ fontSize: 12, color: "#556677" }}>AI 분석은 관리자만 사용할 수 있어요</div>
-          </div>
-        )}
-        {view === "ai-analyze" && isAdmin && (
+        {view === "ai-analyze" && (
           <AIAnalyzeView
             anthropicKey={anthropicKey}
+            isAdmin={isAdmin}
             onSave={async (stock) => {
               const updated = [...stocks, stock];
               await save(updated);
@@ -1159,7 +1097,7 @@ export default function App() {
           </div>
         )}
 
-        {(view === "add" || view === "edit") && editStock && !isGuest && (
+        {(view === "add" || view === "edit") && editStock && isAdmin && (
           <StockForm
             stock={editStock}
             isEdit={view === "edit"}
@@ -1741,7 +1679,7 @@ Bear X% × 가격 = 금액
 }
 
 // ── AI ANALYZE VIEW ────────────────────────────────────────────────
-function AIAnalyzeView({ anthropicKey, onSave }) {
+function AIAnalyzeView({ anthropicKey, onSave, isAdmin = false }) {
   const [companyName, setCompanyName] = useState("");
   const [depth, setDepth] = useState("deep");
   const [loading, setLoading] = useState(false);
@@ -1801,6 +1739,17 @@ function AIAnalyzeView({ anthropicKey, onSave }) {
       </div>
     </div>
   );
+
+  // 게스트 안내 배너
+  const GuestBanner = () => !isAdmin ? (
+    <div style={{ background: "#1a1a2e", border: "1px solid #9b59b644", borderRadius: 8, padding: "12px 16px", marginBottom: 20, display: "flex", alignItems: "center", gap: 10 }}>
+      <span style={{ fontSize: 18 }}>🔒</span>
+      <div>
+        <div style={{ fontSize: 11, color: "#9b59b6", fontWeight: 500 }}>AI 분석 실행은 관리자 전용이에요</div>
+        <div style={{ fontSize: 10, color: "#556677" }}>분석 결과 열람은 가능해요 · 직접 분석하려면 관리자에게 문의하세요</div>
+      </div>
+    </div>
+  ) : null;
 
   if (step === "preview" && result) {
     const upside = result.currentPrice && result.fairValue
@@ -1904,13 +1853,15 @@ function AIAnalyzeView({ anthropicKey, onSave }) {
   return (
     <div className="fade-in" style={{ maxWidth: 620, margin: "0 auto" }}>
       <div style={{ fontFamily: "Syne, sans-serif", fontSize: 22, fontWeight: 800, marginBottom: 8 }}>🤖 AI 자동 분석</div>
-      <div style={{ fontSize: 12, color: "#8899aa", marginBottom: 28, lineHeight: 1.7 }}>
+      <div style={{ fontSize: 12, color: "#8899aa", marginBottom: 20, lineHeight: 1.7 }}>
         기업명만 입력하면 월스트리트 IB 수준의 분석을 자동 생성해드려요.<br/>
         웹 검색으로 실시간 데이터 수집 · DCF · Comps · 딜 레이더 · 역산검증 포함.
       </div>
 
+      <GuestBanner />
+
       {/* Depth selector */}
-      <div style={{ display: "flex", gap: 10, marginBottom: 20 }}>
+      <div style={{ display: "flex", gap: 10, marginBottom: 20, opacity: isAdmin ? 1 : 0.4, pointerEvents: isAdmin ? "auto" : "none" }}>
         {[
           { value: "quick", icon: "⚡", label: "빠른 분석", desc: "20~40초 · 핵심만" },
           { value: "deep", icon: "🔬", label: "심층 분석", desc: "60~90초 · 웹검색 5회+" },
@@ -1923,15 +1874,16 @@ function AIAnalyzeView({ anthropicKey, onSave }) {
         ))}
       </div>
 
-      <div className="card" style={{ padding: 28 }}>
+      <div className="card" style={{ padding: 28, opacity: isAdmin ? 1 : 0.4 }}>
         <div style={{ fontSize: 11, color: "#8899aa", marginBottom: 10 }}>기업명 또는 티커 입력</div>
         <div style={{ display: "flex", gap: 10 }}>
-          <input value={companyName} onChange={e => setCompanyName(e.target.value)}
-            onKeyDown={e => e.key === "Enter" && analyze()}
-            placeholder="예) SK하이닉스 / NVIDIA / 삼성전자 / TSMC ..."
-            style={{ flex: 1, fontSize: 15, padding: "12px 16px" }} autoFocus />
+          <input value={companyName} onChange={e => isAdmin && setCompanyName(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && isAdmin && analyze()}
+            placeholder={isAdmin ? "예) SK하이닉스 / NVIDIA / 삼성전자 / TSMC ..." : "관리자만 사용 가능"}
+            style={{ flex: 1, fontSize: 15, padding: "12px 16px", cursor: isAdmin ? "text" : "not-allowed" }}
+            readOnly={!isAdmin} />
           <button className="btn-gold" style={{ background: "#9b59b6", borderColor: "#9b59b6", padding: "12px 24px", fontSize: 13 }}
-            onClick={analyze} disabled={loading || !companyName.trim()}>
+            onClick={analyze} disabled={!isAdmin || loading || !companyName.trim()}>
             🤖 분석 시작
           </button>
         </div>
