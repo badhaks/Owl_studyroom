@@ -387,6 +387,10 @@ export default function App() {
                 onClick={refreshAllPrices} disabled={refreshing} title="전체 주가 갱신">
                 {refreshing ? "⟳ 갱신중..." : "⟳ 주가 갱신"}
               </button>
+              <button className="btn-gold" style={{ background: "#9b59b6", borderColor: "#9b59b6" }}
+                onClick={() => setView("ai-analyze")}>
+                🤖 AI 분석
+              </button>
               <button className="btn-gold" onClick={() => { setEditStock({ ...EMPTY_STOCK, id: Date.now().toString() }); setView("add"); }}>
                 + ADD STOCK
               </button>
@@ -906,6 +910,19 @@ export default function App() {
             </div>
           </div>
         )}
+        {/* AI ANALYZE VIEW */}
+        {view === "ai-analyze" && (
+          <AIAnalyzeView
+            anthropicKey={anthropicKey}
+            onSave={async (stock) => {
+              const updated = [...stocks, stock];
+              await save(updated);
+              setSelected(stock);
+              setView("detail");
+            }}
+          />
+        )}
+
         {/* SECTOR VIEW */}
         {view === "sector" && (
           <div className="fade-in">
@@ -1527,5 +1544,199 @@ Bear X% × 가격 = 금액
         </div>
       )}
     </>
+  );
+}
+
+// ── AI ANALYZE VIEW ────────────────────────────────────────────────
+function AIAnalyzeView({ anthropicKey, onSave }) {
+  const [companyName, setCompanyName] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState("");
+  const [step, setStep] = useState("input"); // input | loading | preview
+
+  const analyze = async () => {
+    if (!companyName.trim()) return;
+    if (!anthropicKey) { setError("⚙ API 설정에서 Anthropic API 키를 먼저 입력해주세요!"); return; }
+    setLoading(true); setError(""); setStep("loading");
+    try {
+      const res = await fetch("/api/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyName: companyName.trim(), anthropicKey }),
+      });
+      const data = await res.json();
+      if (data.error) { setError(data.error); setStep("input"); }
+      else { setResult(data); setStep("preview"); }
+    } catch (e) { setError(e.message); setStep("input"); }
+    setLoading(false);
+  };
+
+  const steps_msg = [
+    "월스트리트 IB 분석가 모드 진입 중...",
+    "DCF 모델 구성 중...",
+    "비교기업(Comps) 분석 중...",
+    "Bull/Base/Bear 시나리오 계산 중...",
+    "딜 레이더 스캔 중...",
+    "확률 가중 적정가 산출 중...",
+    "분석 결과 정리 중...",
+  ];
+  const [stepIdx, setStepIdx] = useState(0);
+  useEffect(() => {
+    if (!loading) { setStepIdx(0); return; }
+    const t = setInterval(() => setStepIdx(i => (i + 1) % steps_msg.length), 2200);
+    return () => clearInterval(t);
+  }, [loading]);
+
+  if (step === "loading") return (
+    <div className="fade-in" style={{ maxWidth: 600, margin: "80px auto", textAlign: "center" }}>
+      <div style={{ fontSize: 48, marginBottom: 24 }}>🤖</div>
+      <div style={{ fontFamily: "Syne, sans-serif", fontSize: 20, fontWeight: 700, color: "#f5a623", marginBottom: 12 }}>
+        {companyName} 분석 중...
+      </div>
+      <div style={{ fontSize: 13, color: "#8899aa", marginBottom: 32, height: 20 }}>{steps_msg[stepIdx]}</div>
+      <div style={{ width: "100%", height: 3, background: "#1e2535", borderRadius: 2, overflow: "hidden" }}>
+        <div style={{ height: "100%", background: "#f5a623", borderRadius: 2, animation: "progress 30s linear forwards" }} />
+      </div>
+      <style>{`@keyframes progress { from { width: 0% } to { width: 90% } }`}</style>
+      <div style={{ marginTop: 16, fontSize: 11, color: "#556677" }}>IB 수준 분석 생성 중... 30~60초 소요될 수 있어요</div>
+    </div>
+  );
+
+  if (step === "preview" && result) {
+    const upside = result.currentPrice && result.fairValue
+      ? (((result.fairValue - result.currentPrice) / result.currentPrice) * 100).toFixed(1)
+      : "—";
+    const vc = verdictColors[result.verdictType] || verdictColors.watch;
+    return (
+      <div className="fade-in">
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
+          <div>
+            <div style={{ fontFamily: "Syne, sans-serif", fontSize: 22, fontWeight: 800 }}>🤖 AI 분석 결과</div>
+            <div style={{ fontSize: 11, color: "#556677", marginTop: 4 }}>검토 후 대시보드에 추가하세요</div>
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="btn-ghost" onClick={() => { setStep("input"); setResult(null); }}>← 다시 분석</button>
+            <button className="btn-gold" style={{ fontSize: 13, padding: "8px 24px" }} onClick={() => onSave(result)}>
+              ✓ 대시보드에 추가
+            </button>
+          </div>
+        </div>
+
+        {/* Preview Card */}
+        <div className="card" style={{ padding: 24, marginBottom: 16, borderLeft: "3px solid #9b59b6" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
+            <span style={{ fontFamily: "Syne, sans-serif", fontSize: 28, fontWeight: 800 }}>{result.ticker}</span>
+            <span className="tag" style={{ background: "#1e2a3a", color: "#7ab8d4" }}>{getMarketInfo(result.market).flag} {result.exchange}</span>
+            <span className="tag" style={{ background: vc.bg, border: `1px solid ${vc.border}`, color: vc.text }}>{result.verdict}</span>
+          </div>
+          <div style={{ fontSize: 13, color: "#8899aa", marginBottom: 16 }}>{result.name} · {result.sector}</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px,1fr))", gap: 12, marginBottom: 16 }}>
+            {[
+              { label: "현재가", value: formatPrice(result.currentPrice, result.currency), color: "#e8eaf6" },
+              { label: "적정가(EST.)", value: formatPrice(result.fairValue, result.currency), color: "#f5a623" },
+              { label: "업사이드", value: `${parseFloat(upside) > 0 ? "+" : ""}${upside}%`, color: parseFloat(upside) > 0 ? "#00d27a" : "#e74c3c" },
+              { label: "확률가중FV", value: result.weightedFV ? formatPrice(result.weightedFV, result.currency) : "—", color: "#3498db" },
+            ].map(item => (
+              <div key={item.label} style={{ background: "#0a0d14", borderRadius: 6, padding: "10px 14px", border: "1px solid #1e2535" }}>
+                <div style={{ fontSize: 9, color: "#556677", marginBottom: 4 }}>{item.label}</div>
+                <div style={{ fontSize: 18, fontWeight: 500, color: item.color }}>{item.value}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ fontSize: 12, color: "#c8d0d8", lineHeight: 1.7, borderLeft: "2px solid #f5a623", paddingLeft: 12 }}>
+            {result.oneLiner}
+          </div>
+        </div>
+
+        {/* Scenarios */}
+        <div className="card" style={{ padding: 20, marginBottom: 16 }}>
+          <div className="section-label">시나리오 분석</div>
+          {result.scenarios?.map(sc => (
+            <div key={sc.type} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid #1e253533" }}>
+              <span style={{ fontSize: 12, color: sc.color, fontWeight: 500, minWidth: 60 }}>{sc.type}</span>
+              <span style={{ fontSize: 11, color: "#8899aa", flex: 1, marginLeft: 12 }}>{sc.description}</span>
+              <div style={{ textAlign: "right", minWidth: 100 }}>
+                <div style={{ fontSize: 13, color: sc.color, fontWeight: 500 }}>{formatPrice(sc.price, result.currency)}</div>
+                <div style={{ fontSize: 10, color: "#556677" }}>{sc.prob}%</div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Key Points preview */}
+        <div className="card" style={{ padding: 20, marginBottom: 16 }}>
+          <div className="section-label">🎯 핵심 인사이트 (미리보기)</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px,1fr))", gap: 8 }}>
+            {result.keyPoints?.slice(0, 4).map(kp => (
+              <div key={kp.num} style={{ background: "#0a0d14", borderRadius: 6, padding: "10px 12px", border: "1px solid #1e2535" }}>
+                <div style={{ fontSize: 10, color: "#f5a623", marginBottom: 3 }}>#{kp.num} {kp.label}</div>
+                <div style={{ fontSize: 11, color: "#8899aa", lineHeight: 1.6 }}>{kp.content}</div>
+              </div>
+            ))}
+          </div>
+          {result.keyPoints?.length > 4 && <div style={{ fontSize: 10, color: "#556677", marginTop: 8 }}>... 외 {result.keyPoints.length - 4}개 — 대시보드 추가 후 상세 확인</div>}
+        </div>
+
+        <div style={{ textAlign: "center", marginTop: 8 }}>
+          <button className="btn-gold" style={{ fontSize: 14, padding: "12px 40px" }} onClick={() => onSave(result)}>
+            ✓ 대시보드에 추가하기
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="fade-in" style={{ maxWidth: 600, margin: "0 auto" }}>
+      <div style={{ fontFamily: "Syne, sans-serif", fontSize: 22, fontWeight: 800, marginBottom: 8 }}>🤖 AI 자동 분석</div>
+      <div style={{ fontSize: 12, color: "#8899aa", marginBottom: 32, lineHeight: 1.7 }}>
+        기업명만 입력하면 월스트리트 IB 수준의 분석을 자동 생성해드려요.<br/>
+        DCF · Comps · 시나리오 · 딜 레이더 · 핵심 인사이트 10개 포함.
+      </div>
+
+      <div className="card" style={{ padding: 28 }}>
+        <div style={{ fontSize: 11, color: "#8899aa", marginBottom: 10 }}>기업명 또는 티커 입력</div>
+        <div style={{ display: "flex", gap: 10 }}>
+          <input
+            value={companyName}
+            onChange={e => setCompanyName(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && analyze()}
+            placeholder="예) SK하이닉스 / NVIDIA / 삼성전자 / TSMC ..."
+            style={{ flex: 1, fontSize: 15, padding: "12px 16px" }}
+            autoFocus
+          />
+          <button className="btn-gold" style={{ background: "#9b59b6", borderColor: "#9b59b6", padding: "12px 24px", fontSize: 13 }}
+            onClick={analyze} disabled={loading || !companyName.trim()}>
+            🤖 분석 시작
+          </button>
+        </div>
+
+        {error && <div style={{ marginTop: 12, fontSize: 12, color: "#e74c3c" }}>{error}</div>}
+
+        <div style={{ marginTop: 24, borderTop: "1px solid #1e2535", paddingTop: 20 }}>
+          <div style={{ fontSize: 10, color: "#556677", letterSpacing: 1, marginBottom: 12 }}>분석에 포함되는 항목</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+            {[
+              "📊 DCF (FCFF 기반 적정가)",
+              "🏢 비교기업 Comps 분석",
+              "🎯 핵심 인사이트 10가지",
+              "📈 Bull/Base/Bear 시나리오",
+              "🔍 딜 레이더 (M&A/IPO/규제)",
+              "⚡ 이벤트별 주가 영향",
+              "📋 가정 테이블 (민감도 포함)",
+              "✅ 할루시네이션 방어 태깅",
+            ].map(item => (
+              <div key={item} style={{ fontSize: 11, color: "#8899aa", padding: "4px 0" }}>{item}</div>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ marginTop: 20, fontSize: 10, color: "#556677", lineHeight: 1.7 }}>
+          ⚠ AI 분석은 참고용이며 투자 권유가 아닙니다. 중요한 수치는 반드시 직접 검증하세요.<br/>
+          분석 생성에 30~60초 소요될 수 있어요.
+        </div>
+      </div>
+    </div>
   );
 }
