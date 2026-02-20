@@ -47,7 +47,7 @@ ${text}
       },
       body: JSON.stringify({
         model: "claude-haiku-4-5-20251001",
-        max_tokens: 2000,
+        max_tokens: 4000,
         messages: [{ role: "user", content: prompt }],
       }),
     });
@@ -56,8 +56,14 @@ ${text}
     if (data.error) return res.status(400).json({ error: data.error.message });
 
     const raw = data.content?.[0]?.text || "";
-    const clean = raw.replace(/```json|```/g, "").trim();
-    const parsed = JSON.parse(clean);
+    // Extract JSON more robustly - find first { and last }
+    const firstBrace = raw.indexOf("{");
+    const lastBrace = raw.lastIndexOf("}");
+    if (firstBrace === -1 || lastBrace === -1) {
+      return res.status(500).json({ error: "AI 응답에서 JSON을 찾을 수 없습니다. 다시 시도해주세요." });
+    }
+    const jsonStr = raw.slice(firstBrace, lastBrace + 1);
+    const parsed = JSON.parse(jsonStr);
     return res.status(200).json(parsed);
   } catch (e) {
     return res.status(500).json({ error: e.message });
