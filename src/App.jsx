@@ -199,7 +199,6 @@ export default function App() {
   const [role, setRole] = useState(() => detectAuth()); // "admin" | "guest" | null
   const [pwInput, setPwInput] = useState("");
   const [pwError, setPwError] = useState(false);
-  const OWNER_PW = "haks2026";
 
   const isAdmin = role === "admin";
   const isGuest = role === "guest";
