@@ -162,51 +162,53 @@ function ChartLinks({ ticker, market }) {
 }
 
 export default function App() {
-  // ── 비밀번호 게이트 ──────────────────────────────────────────
-  const [authed, setAuthed] = useState(() => {
-    try { return localStorage.getItem("owl_auth") === "granted"; } catch { return false; }
-  });
-  const [pwInput, setPwInput] = useState("");
-  const [pwError, setPwError] = useState(false);
+  // ── 접근 제어 ─────────────────────────────────────────────────
+  // 키 목록 — 여기서 관리
+  const ADMIN_KEYS = ["haks-owner"];          // 관리자: 모든 기능
+  const GUEST_KEYS = ["haks-guest1", "haks-guest2", "haks-guest3"]; // 게스트: 보기만
 
-  // 비밀번호 여기서 변경 가능 (sha256 없이 간단 비교)
-  const PASSWORD = "haks2026";
-
-  const handleLogin = () => {
-    if (pwInput === PASSWORD) {
-      try { localStorage.setItem("owl_auth", "granted"); } catch {}
-      setAuthed(true); setPwError(false);
-    } else {
-      setPwError(true);
-      setTimeout(() => setPwError(false), 1500);
-    }
+  const detectAuth = () => {
+    try {
+      const urlKey = new URLSearchParams(window.location.search).get("key");
+      if (urlKey) {
+        if (ADMIN_KEYS.includes(urlKey)) { localStorage.setItem("owl_auth_key", urlKey); window.history.replaceState({}, "", window.location.pathname); return "admin"; }
+        if (GUEST_KEYS.includes(urlKey)) { localStorage.setItem("owl_auth_key", urlKey); window.history.replaceState({}, "", window.location.pathname); return "guest"; }
+      }
+      const saved = localStorage.getItem("owl_auth_key");
+      if (ADMIN_KEYS.includes(saved)) return "admin";
+      if (GUEST_KEYS.includes(saved)) return "guest";
+    } catch {}
+    return null;
   };
 
-  if (!authed) return (
+  const [role, setRole] = useState(() => detectAuth()); // "admin" | "guest" | null
+  const [pwInput, setPwInput] = useState("");
+  const [pwError, setPwError] = useState(false);
+  const OWNER_PW = "haks2026";
+
+  const isAdmin = role === "admin";
+  const isGuest = role === "guest";
+
+  const handleLogin = () => {
+    if (pwInput === OWNER_PW) {
+      try { localStorage.setItem("owl_auth_key", "haks-owner"); } catch {}
+      setRole("admin"); setPwError(false);
+    } else { setPwError(true); setTimeout(() => setPwError(false), 1500); }
+  };
+
+  if (!role) return (
     <div style={{ minHeight: "100vh", background: "#080b11", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "DM Mono, monospace" }}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@700;800&display=swap'); * { box-sizing: border-box; margin: 0; padding: 0; } input { background: #0f1420; border: 1px solid #1e2535; color: #e8eaf6; padding: 12px 16px; border-radius: 4px; font-family: 'DM Mono', monospace; font-size: 14px; outline: none; width: 100%; } input:focus { border-color: #f5a623; }`}</style>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@700;800&display=swap'); *{box-sizing:border-box;margin:0;padding:0;} input{background:#0f1420;border:1px solid #1e2535;color:#e8eaf6;padding:12px 16px;border-radius:4px;font-family:'DM Mono',monospace;font-size:14px;outline:none;width:100%;} input:focus{border-color:#f5a623;}`}</style>
       <div style={{ textAlign: "center", width: 320 }}>
-        <div style={{ fontFamily: "Syne, sans-serif", fontSize: 28, fontWeight: 800, color: "#f5a623", letterSpacing: 3, marginBottom: 4 }}>
-          ANALYST<span style={{ color: "#e8eaf6" }}>OS</span>
-        </div>
+        <div style={{ fontFamily: "Syne, sans-serif", fontSize: 28, fontWeight: 800, color: "#f5a623", letterSpacing: 3, marginBottom: 4 }}>ANALYST<span style={{ color: "#e8eaf6" }}>OS</span></div>
         <div style={{ fontSize: 10, color: "#556677", letterSpacing: 2, marginBottom: 40 }}>PRIVATE RESEARCH DESK</div>
         <div style={{ background: "#0f1420", border: "1px solid #1e2535", borderRadius: 10, padding: 28 }}>
-          <div style={{ fontSize: 11, color: "#556677", letterSpacing: 2, marginBottom: 16 }}>ENTER PASSWORD</div>
-          <input
-            type="password"
-            value={pwInput}
-            onChange={e => setPwInput(e.target.value)}
-            onKeyDown={e => e.key === "Enter" && handleLogin()}
-            placeholder="••••••••"
-            style={{ border: `1px solid ${pwError ? "#e74c3c" : "#1e2535"}`, marginBottom: 12, textAlign: "center", letterSpacing: 4, fontSize: 18 }}
-            autoFocus
-          />
+          <div style={{ fontSize: 11, color: "#556677", letterSpacing: 2, marginBottom: 6 }}>ADMIN ACCESS</div>
+          <div style={{ fontSize: 10, color: "#556677", marginBottom: 16 }}>게스트는 초대 링크로 접속하세요</div>
+          <input type="password" value={pwInput} onChange={e => setPwInput(e.target.value)} onKeyDown={e => e.key === "Enter" && handleLogin()}
+            placeholder="••••••••" style={{ border: `1px solid ${pwError ? "#e74c3c" : "#1e2535"}`, marginBottom: 12, textAlign: "center", letterSpacing: 4, fontSize: 18 }} autoFocus />
           {pwError && <div style={{ fontSize: 11, color: "#e74c3c", marginBottom: 10 }}>비밀번호가 틀렸어요</div>}
-          <button
-            onClick={handleLogin}
-            style={{ width: "100%", background: "#f5a623", color: "#0a0d14", border: "none", padding: "12px", fontSize: 12, fontWeight: 600, letterSpacing: 2, borderRadius: 4, cursor: "pointer", fontFamily: "DM Mono, monospace" }}>
-            ACCESS →
-          </button>
+          <button onClick={handleLogin} style={{ width: "100%", background: "#f5a623", color: "#0a0d14", border: "none", padding: "12px", fontSize: 12, fontWeight: 600, letterSpacing: 2, borderRadius: 4, cursor: "pointer", fontFamily: "DM Mono, monospace" }}>ACCESS →</button>
         </div>
       </div>
     </div>
@@ -503,7 +505,7 @@ export default function App() {
           ) : (
             <><span style={{ width: 6, height: 6, borderRadius: "50%", background: "#556677", display: "inline-block", marginRight: 6 }} /><span style={{ fontSize: 10, color: "#556677" }}>MANUAL</span></>
           )}
-          {view === "dashboard" && (
+          {view === "dashboard" && isAdmin && (
             <>
               <button className="btn-ghost" style={{ fontSize: 11, padding: "5px 12px" }} onClick={() => setView("settings")}>⚙ API 설정</button>
               <button className="btn-outline" style={{ fontSize: 11, padding: "5px 12px", opacity: refreshing ? 0.5 : 1 }} onClick={refreshAllPrices} disabled={refreshing}>
@@ -512,6 +514,9 @@ export default function App() {
               <button className="btn-gold" style={{ background: "#9b59b6", borderColor: "#9b59b6" }} onClick={() => setView("ai-analyze")}>🤖 AI 분석</button>
               <button className="btn-gold" onClick={() => { setEditStock({ ...EMPTY_STOCK, id: Date.now().toString() }); setView("add"); }}>+ ADD STOCK</button>
             </>
+          )}
+          {isGuest && (
+            <span style={{ fontSize: 10, color: "#556677", border: "1px solid #1e2535", padding: "4px 10px", borderRadius: 3 }}>👁 READ ONLY</span>
           )}
         </div>
         {/* Mobile: live indicator only */}
@@ -527,10 +532,10 @@ export default function App() {
       <div className="mobile-nav">
         {[
           { icon: "📊", label: "홈", action: () => setView("dashboard"), active: view === "dashboard" },
-          { icon: "🤖", label: "AI분석", action: () => setView("ai-analyze"), active: view === "ai-analyze" },
+          ...(isAdmin ? [{ icon: "🤖", label: "AI분석", action: () => setView("ai-analyze"), active: view === "ai-analyze" }] : []),
           { icon: "⚖", label: "비교", action: () => setView("compare"), active: view === "compare" },
           { icon: "🏭", label: "섹터", action: () => setView("sector"), active: view === "sector" },
-          { icon: "⚙", label: "설정", action: () => setView("settings"), active: view === "settings" },
+          ...(isAdmin ? [{ icon: "⚙", label: "설정", action: () => setView("settings"), active: view === "settings" }] : []),
         ].map(item => (
           <button key={item.label} className={`mobile-nav-btn ${item.active ? "active" : ""}`} onClick={item.action}>
             <span className="mobile-nav-icon">{item.icon}</span>
@@ -544,7 +549,19 @@ export default function App() {
         {/* DASHBOARD */}
         {view === "dashboard" && (
           <div className="fade-in">
-            {/* Stats row */}
+            {/* Guest banner */}
+            {isGuest && (
+              <div style={{ background: "#1a1a2e", border: "1px solid #3498db44", borderRadius: 8, padding: "10px 16px", marginBottom: 16, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ fontSize: 16 }}>👁</span>
+                  <div>
+                    <div style={{ fontSize: 11, color: "#3498db", fontWeight: 500 }}>READ ONLY 모드</div>
+                    <div style={{ fontSize: 10, color: "#556677" }}>분석 열람만 가능합니다 · 수정/추가/삭제 비활성화</div>
+                  </div>
+                </div>
+                <span style={{ fontSize: 9, color: "#556677", border: "1px solid #1e2535", padding: "3px 8px", borderRadius: 3 }}>GUEST</span>
+              </div>
+            )}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, marginBottom: 24 }}>
               {[
                 { label: "TOTAL POSITIONS", value: stocks.length },
@@ -790,8 +807,8 @@ export default function App() {
                 </div>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   <GrokPromptButton stock={selected} />
-                  <button className="btn-outline" onClick={() => { setEditStock({ ...selected }); setView("edit"); }}>EDIT</button>
-                  <button className="btn-danger" onClick={() => setShowDeleteConfirm(true)}>DELETE</button>
+                  {isAdmin && <button className="btn-outline" onClick={() => { setEditStock({ ...selected }); setView("edit"); }}>EDIT</button>}
+                  {isAdmin && <button className="btn-danger" onClick={() => setShowDeleteConfirm(true)}>DELETE</button>}
                 </div>
               </div>
 
@@ -1129,7 +1146,7 @@ export default function App() {
           </div>
         )}
 
-        {(view === "add" || view === "edit") && editStock && (
+        {(view === "add" || view === "edit") && editStock && !isGuest && (
           <StockForm
             stock={editStock}
             isEdit={view === "edit"}
