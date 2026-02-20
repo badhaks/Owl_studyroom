@@ -3,27 +3,16 @@ import React, { useState, useEffect, useRef } from "react";
 // Alpha Vantage: fetch real-time price for a ticker
 // For KR stocks use ticker like "005930.KS" (Samsung)
 async function fetchLivePrice(ticker, market, apiKey) {
-  if (!apiKey) return null;
-  // Build Yahoo Finance style symbol
-  const suffixMap = { KR: ".KS", HK: ".HK", TW: ".TW", CN_SH: ".SS", CN_SZ: ".SZ" };
-  const suffix = suffixMap[market] || "";
-  const t = market === "KR" ? ticker.padStart(6, "0") : ticker;
-  const symbol = suffix ? `${t}${suffix}` : t;
-
-  // Try Alpha Vantage
   try {
-    const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${encodeURIComponent(symbol)}&apikey=${apiKey}`;
-    const res = await fetch(url);
+    const res = await fetch("/api/price", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ticker, market, apiKey }),
+    });
     const data = await res.json();
-    // Check for rate limit message
-    if (data?.Note || data?.Information) {
-      console.warn("Alpha Vantage rate limit hit:", data.Note || data.Information);
-      return null;
-    }
-    const price = parseFloat(data?.["Global Quote"]?.["05. price"]);
-    if (!isNaN(price) && price > 0) return price;
-  } catch (e) { console.error("AV fetch error:", e); }
-  return null;
+    if (data.price && data.price > 0) return data.price;
+    return null;
+  } catch { return null; }
 }
 
 const INITIAL_STOCKS = [
@@ -147,18 +136,33 @@ function getTVSymbol(ticker, market) {
   if (market === "TW") return `TWSE:${ticker}`;
   if (market === "CN_SH") return `SSE:${ticker}`;
   if (market === "CN_SZ") return `SZSE:${ticker}`;
-  return ticker; // US: just ticker, TradingView auto-resolves
+  return ticker;
 }
 
-function TradingViewWidget({ ticker, market, exchange }) {
+function TradingViewWidget({ ticker, market }) {
   const symbol = getTVSymbol(ticker, market);
-  const src = `https://www.tradingview.com/widgetembed/?frameElementId=tv_chart&symbol=${encodeURIComponent(symbol)}&interval=D&hidesidetoolbar=0&symboledit=0&saveimage=0&toolbarbg=0f1420&studies=RSI%40tv-basicstudies%1FMACD%40tv-basicstudies&theme=dark&style=1&timezone=Asia%2FSeoul&withdateranges=1&showpopupbutton=0&locale=kr&utm_source=owl-studyroom.vercel.app`;
+  const params = new URLSearchParams({
+    symbol,
+    interval: "D",
+    timezone: "Asia/Seoul",
+    theme: "dark",
+    style: "1",
+    locale: "kr",
+    toolbar_bg: "#0f1420",
+    enable_publishing: "false",
+    hide_top_toolbar: "false",
+    hide_legend: "false",
+    save_image: "false",
+    studies: JSON.stringify(["RSI@tv-basicstudies", "MACD@tv-basicstudies"]),
+    height: "480",
+  });
+  const src = `https://s.tradingview.com/widgetembed/?${params.toString()}`;
   return (
-    <div style={{ width: "100%", height: 500, borderRadius: 6, overflow: "hidden", background: "#0f1420" }}>
+    <div style={{ width: "100%", height: 480, borderRadius: 6, overflow: "hidden", background: "#0f1420" }}>
       <iframe
+        key={symbol}
         src={src}
         style={{ width: "100%", height: "100%", border: "none" }}
-        allowTransparency
         allowFullScreen
         title={`${ticker} Chart`}
       />
