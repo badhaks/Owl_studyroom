@@ -131,7 +131,6 @@ const EMPTY_STOCK = {
 };
 
 function getTVSymbol(ticker, market) {
-  if (market === "KR") return `KRX:${ticker}`;
   if (market === "HK") return `HKEX:${parseInt(ticker, 10)}`;
   if (market === "TW") return `TWSE:${ticker}`;
   if (market === "CN_SH") return `SSE:${ticker}`;
@@ -139,14 +138,61 @@ function getTVSymbol(ticker, market) {
   return ticker;
 }
 
+const PERIODS_KR = [
+  { label: "일", value: "day" },
+  { label: "주", value: "week" },
+  { label: "월", value: "month" },
+  { label: "연", value: "year" },
+];
+
+const PERIODS_TV = [
+  { label: "일", range: "1m|1D" },
+  { label: "주", range: "3m|1W" },
+  { label: "월", range: "12m|1M" },
+  { label: "연", range: "60m|1M" },
+];
+
+function PeriodButtons({ periods, selected, onSelect }) {
+  return (
+    <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+      {periods.map(p => (
+        <button key={p.label} onClick={() => onSelect(p)}
+          style={{ background: selected.label === p.label ? "#f5a623" : "transparent", color: selected.label === p.label ? "#0a0d14" : "#8899aa", border: `1px solid ${selected.label === p.label ? "#f5a623" : "#1e2535"}`, padding: "4px 14px", fontSize: 12, borderRadius: 3, cursor: "pointer", fontFamily: "DM Mono, monospace" }}>
+          {p.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function TradingViewWidget({ ticker, market }) {
   const ref = useRef(null);
-  const symbol = getTVSymbol(ticker, market);
+  const [period, setPeriod] = useState(market === "KR" ? PERIODS_KR[0] : PERIODS_TV[0]);
 
+  // Korean stocks → Naver Finance iframe
+  if (market === "KR") {
+    const code = ticker.padStart(6, "0");
+    const periodMap = { day: "day", week: "week", month: "month", year: "year" };
+    const naverUrl = `https://finance.naver.com/item/fchart.naver?code=${code}&timeframe=${periodMap[period.value]}`;
+    return (
+      <div style={{ width: "100%" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+          <PeriodButtons periods={PERIODS_KR} selected={period} onSelect={setPeriod} />
+          <a href={`https://finance.naver.com/item/main.naver?code=${code}`} target="_blank" rel="noreferrer"
+            style={{ fontSize: 10, color: "#f5a623", textDecoration: "none" }}>네이버에서 보기 →</a>
+        </div>
+        <iframe key={`${ticker}-${period.value}`} src={naverUrl}
+          style={{ width: "100%", height: 480, border: "none", borderRadius: 6 }}
+          title={`${ticker} 차트`} />
+      </div>
+    );
+  }
+
+  // US / HK / TW / CN → TradingView
+  const symbol = getTVSymbol(ticker, market);
   useEffect(() => {
     if (!ref.current) return;
     ref.current.innerHTML = "";
-
     const script = document.createElement("script");
     script.type = "text/javascript";
     script.src = "https://s3.tradingview.com/external-embedding/embed-widget-symbol-overview.js";
@@ -155,18 +201,15 @@ function TradingViewWidget({ ticker, market }) {
       symbols: [[symbol]],
       chartOnly: false,
       width: "100%",
-      height: 400,
+      height: 420,
       locale: "kr",
       colorTheme: "dark",
       autosize: true,
       showVolume: true,
       showMA: true,
       hideDateRanges: false,
-      hideMarketStatus: false,
       scalePosition: "right",
       scaleMode: "Normal",
-      fontFamily: "DM Mono, monospace",
-      fontSize: "10",
       noTimeScale: false,
       valuesTracking: "1",
       changeMode: "price-and-percent",
@@ -175,17 +218,17 @@ function TradingViewWidget({ ticker, market }) {
       maLineWidth: 1,
       maLength: 20,
       backgroundColor: "rgba(9, 13, 20, 1)",
-      lineWidth: 2,
-      lineType: 0,
-      dateRanges: ["1m|1D", "3m|1D", "12m|1W", "60m|1M"],
+      dateRanges: [period.range],
     });
-
     ref.current.appendChild(script);
-  }, [symbol]);
+  }, [symbol, period]);
 
   return (
-    <div className="tradingview-widget-container" ref={ref} style={{ width: "100%", height: 420 }}>
-      <div className="tradingview-widget-container__widget" />
+    <div style={{ width: "100%" }}>
+      <PeriodButtons periods={PERIODS_TV} selected={period} onSelect={setPeriod} />
+      <div className="tradingview-widget-container" ref={ref} style={{ width: "100%", height: 420 }}>
+        <div className="tradingview-widget-container__widget" />
+      </div>
     </div>
   );
 }
