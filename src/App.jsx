@@ -140,32 +140,52 @@ function getTVSymbol(ticker, market) {
 }
 
 function TradingViewWidget({ ticker, market }) {
+  const ref = useRef(null);
   const symbol = getTVSymbol(ticker, market);
-  const params = new URLSearchParams({
-    symbol,
-    interval: "D",
-    timezone: "Asia/Seoul",
-    theme: "dark",
-    style: "1",
-    locale: "kr",
-    toolbar_bg: "#0f1420",
-    enable_publishing: "false",
-    hide_top_toolbar: "false",
-    hide_legend: "false",
-    save_image: "false",
-    studies: JSON.stringify(["RSI@tv-basicstudies", "MACD@tv-basicstudies"]),
-    height: "480",
-  });
-  const src = `https://s.tradingview.com/widgetembed/?${params.toString()}`;
+
+  useEffect(() => {
+    if (!ref.current) return;
+    ref.current.innerHTML = "";
+
+    const script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src = "https://s3.tradingview.com/external-embedding/embed-widget-symbol-overview.js";
+    script.async = true;
+    script.innerHTML = JSON.stringify({
+      symbols: [[symbol]],
+      chartOnly: false,
+      width: "100%",
+      height: 400,
+      locale: "kr",
+      colorTheme: "dark",
+      autosize: true,
+      showVolume: true,
+      showMA: true,
+      hideDateRanges: false,
+      hideMarketStatus: false,
+      scalePosition: "right",
+      scaleMode: "Normal",
+      fontFamily: "DM Mono, monospace",
+      fontSize: "10",
+      noTimeScale: false,
+      valuesTracking: "1",
+      changeMode: "price-and-percent",
+      chartType: "candlesticks",
+      maLineColor: "#f5a623",
+      maLineWidth: 1,
+      maLength: 20,
+      backgroundColor: "rgba(9, 13, 20, 1)",
+      lineWidth: 2,
+      lineType: 0,
+      dateRanges: ["1m|1D", "3m|1D", "12m|1W", "60m|1M"],
+    });
+
+    ref.current.appendChild(script);
+  }, [symbol]);
+
   return (
-    <div style={{ width: "100%", height: 480, borderRadius: 6, overflow: "hidden", background: "#0f1420" }}>
-      <iframe
-        key={symbol}
-        src={src}
-        style={{ width: "100%", height: "100%", border: "none" }}
-        allowFullScreen
-        title={`${ticker} Chart`}
-      />
+    <div className="tradingview-widget-container" ref={ref} style={{ width: "100%", height: 420 }}>
+      <div className="tradingview-widget-container__widget" />
     </div>
   );
 }
