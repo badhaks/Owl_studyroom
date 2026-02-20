@@ -113,7 +113,9 @@ export default function App() {
   const [apiKeyInput, setApiKeyInput] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const [lastRefresh, setLastRefresh] = useState(null);
-  const [refreshStatus, setRefreshStatus] = useState({}); // { [id]: "ok"|"fail"|"loading" }
+  const [refreshStatus, setRefreshStatus] = useState({});
+  const [anthropicKey, setAnthropicKey] = useState("");
+  const [anthropicKeyInput, setAnthropicKeyInput] = useState(""); // { [id]: "ok"|"fail"|"loading" }
 
   useEffect(() => {
     (async () => {
@@ -122,6 +124,8 @@ export default function App() {
         if (r && r.value) setStocks(JSON.parse(r.value));
         const k = await window.storage.get("av_api_key");
         if (k && k.value) { setApiKey(k.value); setApiKeyInput(k.value); }
+        const ak = await window.storage.get("anthropic_key");
+        if (ak && ak.value) { setAnthropicKey(ak.value); setAnthropicKeyInput(ak.value); }
       } catch {}
       setLoaded(true);
     })();
@@ -130,6 +134,11 @@ export default function App() {
   const saveApiKey = async () => {
     setApiKey(apiKeyInput);
     try { await window.storage.set("av_api_key", apiKeyInput); } catch {}
+  };
+
+  const saveAnthropicKey = async () => {
+    setAnthropicKey(anthropicKeyInput);
+    try { await window.storage.set("anthropic_key", anthropicKeyInput); } catch {}
   };
 
   const refreshAllPrices = async () => {
@@ -364,6 +373,34 @@ export default function App() {
         {view === "settings" && (
           <div className="fade-in" style={{ maxWidth: 600, margin: "0 auto" }}>
             <div style={{ fontFamily: "Syne, sans-serif", fontSize: 22, fontWeight: 800, marginBottom: 24 }}>⚙ API 설정</div>
+
+            <div className="card" style={{ padding: 28, marginBottom: 20 }}>
+              <div className="section-label">Anthropic API 키 (AI 자동 파싱용)</div>
+              <p style={{ fontSize: 12, color: "#8899aa", marginBottom: 16, lineHeight: 1.7 }}>
+                Grok 분석 텍스트를 자동으로 파싱하는 기능에 사용돼요.<br/>
+                분석 1회 = 약 $0.003 (0.4원) 수준으로 거의 무료예요.
+              </p>
+              <div style={{ background: "#0a0d14", border: "1px solid #f5a62333", borderRadius: 6, padding: "16px 20px", marginBottom: 20 }}>
+                <div style={{ fontSize: 11, color: "#f5a623", marginBottom: 10, fontWeight: 500 }}>🔑 API 키 발급 방법</div>
+                <div style={{ fontSize: 12, color: "#a0aab8", lineHeight: 2 }}>
+                  <div>1. <span style={{ color: "#3498db" }}>https://console.anthropic.com</span> 접속</div>
+                  <div>2. 회원가입 → 로그인</div>
+                  <div>3. 좌측 메뉴 <strong style={{color:"#e8eaf6"}}>API Keys</strong> → <strong style={{color:"#e8eaf6"}}>Create Key</strong></div>
+                  <div>4. 키 복사 후 아래에 붙여넣기</div>
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 10 }}>
+                <input
+                  type="password"
+                  value={anthropicKeyInput}
+                  onChange={e => setAnthropicKeyInput(e.target.value)}
+                  placeholder="sk-ant-..."
+                  style={{ flex: 1 }}
+                />
+                <button className="btn-gold" onClick={() => { saveAnthropicKey(); }}>저장</button>
+              </div>
+              {anthropicKey && <div style={{ marginTop: 10, fontSize: 11, color: "#00d27a" }}>✓ Anthropic 키 저장됨 — AI 자동 파싱 활성화</div>}
+            </div>
 
             <div className="card" style={{ padding: 28, marginBottom: 20 }}>
               <div className="section-label">Alpha Vantage API 키</div>
@@ -621,6 +658,7 @@ export default function App() {
           <StockForm
             stock={editStock}
             isEdit={view === "edit"}
+            anthropicKey={anthropicKey}
             onSave={async (newStock) => {
               let updated;
               if (view === "add") {
@@ -663,7 +701,7 @@ function PriceEditor({ stock, currentPrice, onSave, currency, onRefresh, refresh
   );
 }
 
-async function parseAnalysisWithAI(text) {
+async function parseAnalysisWithAI(text, anthropicKey) {
   const prompt = `아래는 주식 분석 텍스트야. 이걸 읽고 JSON 형식으로만 응답해. 다른 설명 없이 JSON만 출력해.
 
 분석 텍스트:
@@ -699,10 +737,15 @@ ${text}
 
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": anthropicKey,
+      "anthropic-version": "2023-06-01",
+      "anthropic-dangerous-direct-browser-access": "true"
+    },
     body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 1000,
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 2000,
       messages: [{ role: "user", content: prompt }]
     })
   });
@@ -712,7 +755,7 @@ ${text}
   return JSON.parse(clean);
 }
 
-function StockForm({ stock, isEdit, onSave, onCancel }) {
+function StockForm({ stock, isEdit, onSave, onCancel, anthropicKey }) {
   const [form, setForm] = useState(stock);
   const [kpText, setKpText] = useState(stock.keyPoints.map(k => `${k.label}: ${k.content}`).join("\n"));
   const [sourcesText, setSourcesText] = useState(stock.sources.join(", "));
@@ -725,11 +768,12 @@ function StockForm({ stock, isEdit, onSave, onCancel }) {
 
   const handleAutoParse = async () => {
     if (!pasteText.trim()) return;
+    if (!anthropicKey) { setParseError("⚙ API 설정에서 Anthropic API 키를 먼저 입력해주세요!"); return; }
     setParsing(true);
     setParseError("");
     setParseSuccess(false);
     try {
-      const parsed = await parseAnalysisWithAI(pasteText);
+      const parsed = await parseAnalysisWithAI(pasteText, anthropicKey);
       setForm(f => ({ ...f, ...parsed, id: f.id }));
       setKpText((parsed.keyPoints || []).map(k => `${k.label}: ${k.content}`).join("\n"));
       setSourcesText((parsed.sources || []).join(", "));
@@ -738,7 +782,7 @@ function StockForm({ stock, isEdit, onSave, onCancel }) {
       setParseSuccess(true);
       setPasteText("");
     } catch (e) {
-      setParseError("파싱 실패. 분석 텍스트를 다시 확인해주세요.");
+      setParseError("파싱 실패. API 키를 확인하거나 텍스트를 다시 붙여넣어 주세요.");
     }
     setParsing(false);
   };
