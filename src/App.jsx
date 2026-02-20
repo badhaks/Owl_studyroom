@@ -840,6 +840,15 @@ export default function App() {
               )}
             </div>
 
+            {/* CONSENSUS - Korean stocks only */}
+            <ConsensusSection
+              ticker={selected.ticker}
+              market={selected.market}
+              ourFairValue={parseFloat(selected.fairValue)}
+              currentPrice={parseFloat(selected.currentPrice)}
+              currency={selected.currency}
+            />
+
             {/* CHART LINKS */}
             <ChartLinks ticker={selected.ticker} market={selected.market} />
 
@@ -1451,6 +1460,144 @@ function HistorySection({ stock }) {
           );
         })}
       </div>
+    </div>
+  );
+}
+
+// ── CONSENSUS SECTION (Korean stocks only) ────────────────────────
+function ConsensusSection({ ticker, market, ourFairValue, currentPrice, currency }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    if (market === "KR") fetchConsensus();
+  }, [ticker]);
+
+  const fetchConsensus = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/consensus", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ticker }),
+      });
+      const d = await res.json();
+      setData(d);
+    } catch {}
+    setLoading(false);
+    setLoaded(true);
+  };
+
+  if (market !== "KR") return null;
+
+  const ourUpside = ourFairValue && currentPrice
+    ? (((ourFairValue - currentPrice) / currentPrice) * 100).toFixed(1)
+    : null;
+  const consUpside = data?.upsideVsConsensus;
+  const diff = ourUpside && consUpside
+    ? (parseFloat(ourUpside) - parseFloat(consUpside)).toFixed(1)
+    : null;
+
+  return (
+    <div className="card" style={{ padding: "20px", marginBottom: 16 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+        <div>
+          <div className="section-label" style={{ margin: 0 }}>📊 HAKS 컨센서스 비교</div>
+          {data?.fetchedAt && <div style={{ fontSize: 9, color: "#556677", marginTop: 2 }}>네이버 금융 기준 · {data.fetchedAt}</div>}
+        </div>
+        <button className="btn-outline" style={{ fontSize: 10, padding: "4px 12px" }} onClick={fetchConsensus} disabled={loading}>
+          {loading ? "⟳" : "⟳ 새로고침"}
+        </button>
+      </div>
+
+      {loading && <div style={{ fontSize: 12, color: "#f5a623", textAlign: "center", padding: "16px 0" }}>⟳ 컨센서스 데이터 수집 중...</div>}
+
+      {loaded && data && !data.error && (
+        <>
+          {/* 목표가 비교 */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 16 }}>
+            <div style={{ background: "#0a0d14", borderRadius: 6, padding: "12px 14px", border: "1px solid #9b59b644" }}>
+              <div style={{ fontSize: 9, color: "#9b59b6", letterSpacing: 1, marginBottom: 4 }}>우리 적정가</div>
+              <div style={{ fontSize: 18, fontWeight: 500, color: "#f5a623" }}>{ourFairValue ? ourFairValue.toLocaleString() : "—"}</div>
+              <div style={{ fontSize: 10, color: ourUpside ? (parseFloat(ourUpside) > 0 ? "#00d27a" : "#e74c3c") : "#556677" }}>
+                {ourUpside ? `${parseFloat(ourUpside) > 0 ? "+" : ""}${ourUpside}%` : "—"}
+              </div>
+            </div>
+            <div style={{ background: "#0a0d14", borderRadius: 6, padding: "12px 14px", border: "1px solid #3498db44" }}>
+              <div style={{ fontSize: 9, color: "#3498db", letterSpacing: 1, marginBottom: 4 }}>HAKS 컨센서스</div>
+              <div style={{ fontSize: 18, fontWeight: 500, color: "#e8eaf6" }}>{data.consensusTargetPrice ? data.consensusTargetPrice.toLocaleString() : "—"}</div>
+              <div style={{ fontSize: 10, color: consUpside ? (parseFloat(consUpside) > 0 ? "#00d27a" : "#e74c3c") : "#556677" }}>
+                {consUpside ? `${parseFloat(consUpside) > 0 ? "+" : ""}${consUpside}%` : "—"}
+              </div>
+            </div>
+            <div style={{ background: "#0a0d14", borderRadius: 6, padding: "12px 14px", border: "1px solid #1e2535" }}>
+              <div style={{ fontSize: 9, color: "#556677", letterSpacing: 1, marginBottom: 4 }}>괴리율</div>
+              <div style={{ fontSize: 18, fontWeight: 500, color: diff ? (parseFloat(diff) > 0 ? "#00d27a" : "#e74c3c") : "#556677" }}>
+                {diff ? `${parseFloat(diff) > 0 ? "+" : ""}${diff}%p` : "—"}
+              </div>
+              <div style={{ fontSize: 10, color: "#556677" }}>
+                {diff ? (parseFloat(diff) > 0 ? "우리가 더 낙관적" : "우리가 더 보수적") : ""}
+              </div>
+            </div>
+          </div>
+
+          {/* 투자의견 분포 */}
+          {data.opinions.total > 0 && (
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 10, color: "#556677", marginBottom: 8 }}>
+                투자의견 분포 · {data.analystCount}개 증권사 커버
+              </div>
+              <div style={{ display: "flex", height: 8, borderRadius: 4, overflow: "hidden", gap: 2, marginBottom: 6 }}>
+                {data.opinions.buyPct > 0 && <div style={{ flex: parseInt(data.opinions.buyPct), background: "#00d27a" }} />}
+                {data.opinions.holdPct > 0 && <div style={{ flex: parseInt(data.opinions.holdPct), background: "#f5a623" }} />}
+                {data.opinions.sellPct > 0 && <div style={{ flex: parseInt(data.opinions.sellPct), background: "#e74c3c" }} />}
+              </div>
+              <div style={{ display: "flex", gap: 16, fontSize: 10 }}>
+                <span style={{ color: "#00d27a" }}>▲ 매수 {data.opinions.buy}개 ({data.opinions.buyPct}%)</span>
+                <span style={{ color: "#f5a623" }}>— 중립 {data.opinions.hold}개 ({data.opinions.holdPct}%)</span>
+                <span style={{ color: "#e74c3c" }}>▼ 매도 {data.opinions.sell}개 ({data.opinions.sellPct}%)</span>
+              </div>
+            </div>
+          )}
+
+          {/* 최근 리포트 */}
+          {data.recentReports?.length > 0 && (
+            <div>
+              <div style={{ fontSize: 10, color: "#556677", letterSpacing: 1, marginBottom: 8 }}>최근 증권사 리포트</div>
+              {data.recentReports.map((r, i) => (
+                <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: "1px solid #1e253533" }}>
+                  <div>
+                    <span style={{ fontSize: 11, color: "#e8eaf6", fontWeight: 500 }}>{r.broker}</span>
+                    {r.title && <span style={{ fontSize: 10, color: "#556677", marginLeft: 8 }}>{r.title.slice(0, 30)}{r.title.length > 30 ? "..." : ""}</span>}
+                  </div>
+                  <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                    {r.opinion && (
+                      <span style={{ fontSize: 10, color: r.opinion.includes("매수") || r.opinion === "Buy" ? "#00d27a" : r.opinion.includes("매도") || r.opinion === "Sell" ? "#e74c3c" : "#f5a623" }}>
+                        {r.opinion}
+                      </span>
+                    )}
+                    {r.targetPrice && <span style={{ fontSize: 11, color: "#f5a623" }}>{r.targetPrice.toLocaleString()}원</span>}
+                    <span style={{ fontSize: 9, color: "#556677" }}>{r.date}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {data.recentReports?.length === 0 && (
+            <div style={{ fontSize: 11, color: "#556677", textAlign: "center", padding: "8px 0" }}>
+              최근 리포트 없음 · <a href={`https://finance.naver.com/research/company_list.naver?code=${ticker.padStart(6,"0")}`} target="_blank" rel="noreferrer" style={{ color: "#f5a623" }}>네이버 금융에서 확인 →</a>
+            </div>
+          )}
+        </>
+      )}
+
+      {loaded && data?.error && (
+        <div style={{ fontSize: 11, color: "#556677" }}>
+          데이터를 불러오지 못했어요. <a href={`https://finance.naver.com/item/main.naver?code=${ticker.padStart(6,"0")}`} target="_blank" rel="noreferrer" style={{ color: "#f5a623" }}>네이버 금융에서 직접 확인 →</a>
+        </div>
+      )}
     </div>
   );
 }
