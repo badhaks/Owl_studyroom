@@ -128,7 +128,41 @@ const EMPTY_STOCK = {
   weightedFV: "", events: [], assumptions: [],
   updatedAt: new Date().toISOString().slice(0, 10),
   sources: [], memo: "",
+  buyPrice: "", quantity: "",
+  history: [],
 };
+
+function getTVSymbol(ticker, market, exchange) {
+  const exMap = { NASDAQ:"NASDAQ", NYSE:"NYSE", KOSPI:"KRX", KOSDAQ:"KOSDAQ", HKEX:"HKEX", TWSE:"TWSE", SSE:"SSE", SZSE:"SZSE" };
+  const prefix = exMap[exchange] || (market==="KR"?"KRX":market==="HK"?"HKEX":market==="TW"?"TWSE":market==="CN_SH"?"SSE":market==="CN_SZ"?"SZSE":"NASDAQ");
+  return `${prefix}:${ticker}`;
+}
+
+function TradingViewWidget({ ticker, market, exchange }) {
+  const ref = React.useRef(null);
+  const symbol = getTVSymbol(ticker, market, exchange);
+  useEffect(() => {
+    if (!ref.current) return;
+    ref.current.innerHTML = "";
+    const container = document.createElement("div");
+    container.className = "tradingview-widget-container__widget";
+    ref.current.appendChild(container);
+    const script = document.createElement("script");
+    script.src = "https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js";
+    script.async = true;
+    script.innerHTML = JSON.stringify({
+      autosize: true, symbol, interval: "D", timezone: "Asia/Seoul",
+      theme: "dark", style: "1", locale: "kr",
+      backgroundColor: "#0f1420", gridColor: "#1e2535",
+      allow_symbol_change: false, save_image: false,
+      studies: ["STD;RSI@tv-basicstudies", "STD;MACD@tv-basicstudies"],
+      show_popup_button: false, height: 480,
+    });
+    ref.current.appendChild(script);
+    return () => { if (ref.current) ref.current.innerHTML = ""; };
+  }, [symbol]);
+  return <div ref={ref} style={{ width:"100%", height:480, borderRadius:6, overflow:"hidden" }} />;
+}
 
 export default function App() {
   const [stocks, setStocks] = useState(INITIAL_STOCKS);
@@ -354,6 +388,9 @@ export default function App() {
                 const upside = getUpside(s.currentPrice, s.fairValue);
                 const vc = verdictColors[s.verdictType] || verdictColors.watch;
                 const isUp = parseFloat(upside) > 0;
+                const hasPF = s.buyPrice && s.quantity;
+                const pnl = hasPF ? ((s.currentPrice - parseFloat(s.buyPrice)) * parseFloat(s.quantity)) : null;
+                const pnlPct = hasPF ? (((s.currentPrice - parseFloat(s.buyPrice)) / parseFloat(s.buyPrice)) * 100).toFixed(1) : null;
                 return (
                   <div key={s.id} className="card fade-in" style={{ padding: 20, cursor: "pointer" }} onClick={() => openDetail(s)}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
@@ -390,7 +427,13 @@ export default function App() {
                         {s.scenarios.map(sc => <span key={sc.type} style={{ color: sc.color }}>{sc.type} {sc.prob}%</span>)}
                       </div>
                     </div>
-                    <div style={{ marginTop: 12, fontSize: 10, color: "#556677" }}>Updated {s.updatedAt}</div>
+                    <div style={{ marginTop: 12, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                      <div style={{ fontSize: 10, color: "#556677" }}>Updated {s.updatedAt}</div>
+                      <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                        {hasPF && <span style={{ fontSize:11, color: pnl>=0?"#00d27a":"#e74c3c", fontWeight:500 }}>{pnl>=0?"+":""}{pnlPct}% P&L</span>}
+                        {s.history?.length > 0 && <span style={{ fontSize:9, color:"#556677", background:"#1e2535", padding:"2px 6px", borderRadius:3 }}>📅 {s.history.length}개 히스토리</span>}
+                      </div>
+                    </div>
                   </div>
                 );
               })}
@@ -685,6 +728,26 @@ export default function App() {
                 </div>
               )}
             </div>
+
+            {/* TRADINGVIEW CHART */}
+            <div className="card" style={{ padding: "20px", marginBottom: 16 }}>
+              <div className="section-label">📈 기술적 분석 차트 (이평선 · RSI · MACD)</div>
+              <div style={{ fontSize: 10, color: "#556677", marginBottom: 12 }}>TradingView 제공 · 실시간 캔들차트</div>
+              <TradingViewWidget ticker={selected.ticker} market={selected.market} exchange={selected.exchange} />
+            </div>
+
+            {/* PORTFOLIO TRACKING */}
+            <PortfolioSection stock={selected} currency={selected.currency} onSave={async (buyPrice, quantity) => {
+              const updated = stocks.map(s => s.id === selected.id ? { ...s, buyPrice, quantity } : s);
+              await save(updated);
+              setSelected({ ...selected, buyPrice, quantity });
+            }} />
+
+            {/* NEWS FEED */}
+            <NewsFeed ticker={selected.ticker} name={selected.name} />
+
+            {/* ANALYSIS HISTORY */}
+            <HistorySection stock={selected} />
           </div>
         )}
 
@@ -699,10 +762,15 @@ export default function App() {
               if (view === "add") {
                 updated = [...stocks, newStock];
               } else {
-                updated = stocks.map(s => s.id === newStock.id ? newStock : s);
+                // Save current state as history snapshot before updating
+                const prev = stocks.find(s => s.id === newStock.id);
+                const snapshot = prev ? { ...prev, savedAt: new Date().toISOString() } : null;
+                const history = [...(prev?.history || [])];
+                if (snapshot) history.unshift(snapshot);
+                updated = stocks.map(s => s.id === newStock.id ? { ...newStock, history: history.slice(0, 20) } : s);
               }
               await save(updated);
-              if (view === "edit") { setSelected(newStock); setView("detail"); }
+              if (view === "edit") { setSelected(updated.find(s => s.id === newStock.id)); setView("detail"); }
               else { goBack(); }
             }}
             onCancel={() => { if (view === "edit") setView("detail"); else goBack(); }}
@@ -951,6 +1019,187 @@ function StockForm({ stock, isEdit, onSave, onCancel, anthropicKey }) {
             <F label="분석일"><input type="date" value={form.updatedAt} onChange={e => set("updatedAt", e.target.value)} /></F>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ── PORTFOLIO SECTION ──────────────────────────────────────────────
+function PortfolioSection({ stock, currency, onSave }) {
+  const [editing, setEditing] = useState(false);
+  const [bp, setBp] = useState(stock.buyPrice || "");
+  const [qty, setQty] = useState(stock.quantity || "");
+
+  const hasPF = stock.buyPrice && stock.quantity && stock.currentPrice;
+  const buyPrice = parseFloat(stock.buyPrice) || 0;
+  const quantity = parseFloat(stock.quantity) || 0;
+  const currentPrice = parseFloat(stock.currentPrice) || 0;
+  const costBasis = buyPrice * quantity;
+  const currentValue = currentPrice * quantity;
+  const pnlAmt = currentValue - costBasis;
+  const pnlPct = buyPrice > 0 ? ((currentPrice - buyPrice) / buyPrice * 100).toFixed(2) : 0;
+  const isProfit = pnlAmt >= 0;
+
+  return (
+    <div className="card" style={{ padding: "20px", marginBottom: 16 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+        <div className="section-label" style={{ margin: 0 }}>📊 포트폴리오 트래킹</div>
+        {!editing
+          ? <button className="btn-outline" style={{ fontSize: 10, padding: "4px 12px" }} onClick={() => { setBp(stock.buyPrice||""); setQty(stock.quantity||""); setEditing(true); }}>EDIT</button>
+          : <div style={{ display:"flex", gap:6 }}>
+              <button className="btn-gold" style={{ fontSize:10, padding:"4px 12px" }} onClick={() => { onSave(bp, qty); setEditing(false); }}>SAVE</button>
+              <button className="btn-ghost" style={{ fontSize:10, padding:"4px 12px" }} onClick={() => setEditing(false)}>CANCEL</button>
+            </div>
+        }
+      </div>
+      {editing ? (
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+          <div><label style={{ fontSize:10, color:"#8899aa", display:"block", marginBottom:4 }}>매수 평균단가</label>
+            <input type="number" value={bp} onChange={e=>setBp(e.target.value)} placeholder="0.00" /></div>
+          <div><label style={{ fontSize:10, color:"#8899aa", display:"block", marginBottom:4 }}>보유 수량</label>
+            <input type="number" value={qty} onChange={e=>setQty(e.target.value)} placeholder="0" /></div>
+        </div>
+      ) : hasPF ? (
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(130px,1fr))", gap:12 }}>
+          {[
+            { label:"매수단가", value: formatPrice(buyPrice, currency), color:"#8899aa" },
+            { label:"현재가", value: formatPrice(currentPrice, currency), color:"#e8eaf6" },
+            { label:"보유수량", value: quantity.toLocaleString(), color:"#8899aa" },
+            { label:"투자원금", value: formatPrice(costBasis, currency), color:"#8899aa" },
+            { label:"평가금액", value: formatPrice(currentValue, currency), color:"#e8eaf6" },
+            { label:"수익/손실", value: `${isProfit?"+":""}${formatPrice(pnlAmt, currency)} (${isProfit?"+":""}${pnlPct}%)`, color: isProfit?"#00d27a":"#e74c3c" },
+          ].map(item => (
+            <div key={item.label} style={{ background:"#0a0d14", borderRadius:6, padding:"10px 14px", border:"1px solid #1e2535" }}>
+              <div style={{ fontSize:9, color:"#556677", marginBottom:4 }}>{item.label}</div>
+              <div style={{ fontSize:14, fontWeight:500, color:item.color }}>{item.value}</div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div style={{ fontSize:12, color:"#556677", textAlign:"center", padding:"16px 0" }}>
+          EDIT을 눌러 매수단가와 수량을 입력하면 수익률이 자동 계산돼요
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── NEWS FEED ──────────────────────────────────────────────────────
+function NewsFeed({ ticker, name }) {
+  const [news, setNews] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState("");
+
+  const fetchNews = async () => {
+    setLoading(true); setError("");
+    try {
+      const q = encodeURIComponent(`${ticker} ${name} stock`);
+      const url = `https://feeds.finance.yahoo.com/rss/2.0/headline?s=${ticker}&region=US&lang=en-US`;
+      const proxyUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(url)}&count=8`;
+      const res = await fetch(proxyUrl);
+      const data = await res.json();
+      if (data.items && data.items.length > 0) {
+        setNews(data.items.map(item => ({
+          title: item.title,
+          link: item.link,
+          date: new Date(item.pubDate).toLocaleDateString("ko-KR"),
+          source: item.author || "Yahoo Finance",
+        })));
+      } else {
+        // fallback: Google News RSS
+        const gUrl = `https://news.google.com/rss/search?q=${encodeURIComponent(ticker+" stock")}&hl=en-US&gl=US&ceid=US:en`;
+        const gProxy = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(gUrl)}&count=8`;
+        const gRes = await fetch(gProxy);
+        const gData = await gRes.json();
+        if (gData.items) {
+          setNews(gData.items.map(item => ({
+            title: item.title,
+            link: item.link,
+            date: new Date(item.pubDate).toLocaleDateString("ko-KR"),
+            source: item.author || "Google News",
+          })));
+        } else { setError("뉴스를 불러오지 못했어요."); }
+      }
+    } catch { setError("뉴스 로드 실패. 잠시 후 다시 시도해주세요."); }
+    setLoading(false); setLoaded(true);
+  };
+
+  return (
+    <div className="card" style={{ padding: "20px", marginBottom: 16 }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
+        <div className="section-label" style={{ margin:0 }}>📰 최신 뉴스</div>
+        <button className="btn-outline" style={{ fontSize:10, padding:"4px 12px" }} onClick={fetchNews} disabled={loading}>
+          {loading ? "⟳ 로딩중..." : loaded ? "⟳ 새로고침" : "뉴스 불러오기"}
+        </button>
+      </div>
+      {!loaded && !loading && <div style={{ fontSize:12, color:"#556677", textAlign:"center", padding:"16px 0" }}>버튼을 눌러 {ticker} 관련 최신 뉴스를 확인하세요</div>}
+      {loading && <div style={{ fontSize:12, color:"#f5a623", textAlign:"center", padding:"16px 0" }}>⟳ 뉴스 수집중...</div>}
+      {error && <div style={{ fontSize:12, color:"#e74c3c" }}>{error}</div>}
+      {news.map((item, i) => (
+        <a key={i} href={item.link} target="_blank" rel="noreferrer" style={{ display:"block", textDecoration:"none" }}>
+          <div style={{ padding:"10px 0", borderBottom:"1px solid #1e253533", cursor:"pointer" }} className="news-item">
+            <div style={{ fontSize:12, color:"#c8d0d8", lineHeight:1.5, marginBottom:4 }}>{item.title}</div>
+            <div style={{ fontSize:10, color:"#556677" }}>{item.source} · {item.date}</div>
+          </div>
+        </a>
+      ))}
+    </div>
+  );
+}
+
+// ── HISTORY SECTION ────────────────────────────────────────────────
+function HistorySection({ stock }) {
+  const [expanded, setExpanded] = useState(null);
+  const history = stock.history || [];
+
+  if (history.length === 0) return (
+    <div className="card" style={{ padding:"20px", marginBottom:24 }}>
+      <div className="section-label">📅 분석 히스토리</div>
+      <div style={{ fontSize:12, color:"#556677", textAlign:"center", padding:"16px 0" }}>
+        분석을 수정하면 이전 버전이 자동으로 여기에 저장돼요
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="card" style={{ padding:"20px", marginBottom:24 }}>
+      <div className="section-label">📅 분석 히스토리 ({history.length}개)</div>
+      <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+        {history.map((snap, i) => {
+          const date = snap.savedAt ? new Date(snap.savedAt).toLocaleString("ko-KR") : snap.updatedAt;
+          const isOpen = expanded === i;
+          const upside = getUpside(snap.currentPrice, snap.fairValue);
+          const vc = verdictColors[snap.verdictType] || verdictColors.watch;
+          return (
+            <div key={i} style={{ border:"1px solid #1e2535", borderRadius:6, overflow:"hidden" }}>
+              <div onClick={() => setExpanded(isOpen ? null : i)}
+                style={{ padding:"12px 16px", cursor:"pointer", display:"flex", justifyContent:"space-between", alignItems:"center", background: isOpen?"#1e2535":"transparent" }}>
+                <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+                  <span style={{ fontSize:10, color:"#f5a623" }}>v{history.length - i}</span>
+                  <span style={{ fontSize:12, color:"#e8eaf6" }}>{date}</span>
+                  <span className="tag" style={{ background: vc.bg, border:`1px solid ${vc.border}`, color: vc.text, fontSize:9 }}>{snap.verdict}</span>
+                </div>
+                <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+                  <span style={{ fontSize:12, color:"#f5a623" }}>{formatPrice(snap.currentPrice, snap.currency)}</span>
+                  <span style={{ fontSize:11, color: parseFloat(upside)>0?"#00d27a":"#e74c3c" }}>{upside>0?"+":""}{upside}%</span>
+                  <span style={{ color:"#556677", fontSize:12 }}>{isOpen?"▲":"▼"}</span>
+                </div>
+              </div>
+              {isOpen && (
+                <div style={{ padding:"16px", borderTop:"1px solid #1e2535", background:"#080b11" }}>
+                  <div style={{ fontSize:12, color:"#a0aab8", lineHeight:1.7, marginBottom:10 }}><strong style={{color:"#f5a623"}}>Verdict:</strong> {snap.oneLiner}</div>
+                  {snap.keyPoints?.slice(0,3).map(kp => (
+                    <div key={kp.num} style={{ fontSize:11, color:"#8899aa", marginBottom:4 }}>
+                      <span style={{ color:"#f5a623" }}>#{kp.num} {kp.label}:</span> {kp.content}
+                    </div>
+                  ))}
+                  {snap.keyPoints?.length > 3 && <div style={{ fontSize:10, color:"#556677" }}>... 외 {snap.keyPoints.length-3}개</div>}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
