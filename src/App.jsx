@@ -4,8 +4,9 @@ import { useState, useEffect } from "react";
 // For KR stocks use ticker like "005930.KS" (Samsung)
 async function fetchLivePrice(ticker, market, apiKey) {
   if (!apiKey) return null;
-  // For KR stocks on Yahoo-style, AV uses KS suffix
-  const symbol = market === "KR" ? `${ticker}.KS` : ticker;
+  const suffixMap = { KR: ".KS", HK: ".HK", TW: ".TW", CN_SH: ".SS", CN_SZ: ".SZ" };
+  const suffix = suffixMap[market] || "";
+  const symbol = suffix ? `${ticker}${suffix}` : ticker;
   const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${apiKey}`;
   try {
     const res = await fetch(url);
@@ -69,8 +70,39 @@ const INITIAL_STOCKS = [
   }
 ];
 
+const MARKETS = [
+  { value: "US", flag: "🇺🇸", label: "US" },
+  { value: "KR", flag: "🇰🇷", label: "KR" },
+  { value: "HK", flag: "🇭🇰", label: "HK" },
+  { value: "TW", flag: "🇹🇼", label: "TW" },
+  { value: "CN_SH", flag: "🇨🇳", label: "CN 상하이" },
+  { value: "CN_SZ", flag: "🇨🇳", label: "CN 선전" },
+];
+
+const CURRENCIES = [
+  { value: "USD", label: "USD ($)" },
+  { value: "KRW", label: "KRW (₩)" },
+  { value: "HKD", label: "HKD (HK$)" },
+  { value: "TWD", label: "TWD (NT$)" },
+  { value: "CNY", label: "CNY (¥)" },
+];
+
+const TICKER_HINTS = {
+  US: "AAPL, NVDA, TSLA ...",
+  KR: "005930 (삼성전자), 000660 (SK하이닉스) ...",
+  HK: "0700 (텐센트), 9988 (알리바바) ...",
+  TW: "2330 (TSMC), 2454 (미디어텍) ...",
+  CN_SH: "600519 (마오타이), 601318 (핑안보험) ...",
+  CN_SZ: "000858 (우리양예), 002415 (하이캉위스) ...",
+};
+
+const getMarketInfo = (market) => MARKETS.find(m => m.value === market) || MARKETS[0];
+
 const formatPrice = (price, currency) => {
   if (currency === "KRW") return `₩${price.toLocaleString()}`;
+  if (currency === "HKD") return `HK$${price.toFixed(2)}`;
+  if (currency === "TWD") return `NT$${price.toFixed(2)}`;
+  if (currency === "CNY") return `¥${price.toFixed(2)}`;
   return `$${price.toFixed(2)}`;
 };
 
@@ -306,11 +338,14 @@ export default function App() {
             {/* Filters */}
             <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
               <input placeholder="종목명 / 티커 / 섹터 검색..." value={searchQ} onChange={e => setSearchQ(e.target.value)} style={{ flex: 1, minWidth: 200 }} />
-              {["ALL","US","KR"].map(m => (
-                <button key={m} onClick={() => setFilterMarket(m)} style={{ background: filterMarket === m ? "#f5a623" : "transparent", color: filterMarket === m ? "#0a0d14" : "#8899aa", border: `1px solid ${filterMarket === m ? "#f5a623" : "#1e2535"}`, padding: "6px 14px", fontSize: 11, borderRadius: 3, letterSpacing: 1 }}>
-                  {m === "ALL" ? "ALL" : m === "US" ? "🇺🇸 US" : "🇰🇷 KR"}
-                </button>
-              ))}
+              {["ALL","US","KR","HK","TW","CN_SH","CN_SZ"].map(m => {
+                const info = m === "ALL" ? { flag: "", label: "ALL" } : getMarketInfo(m);
+                return (
+                  <button key={m} onClick={() => setFilterMarket(m)} style={{ background: filterMarket === m ? "#f5a623" : "transparent", color: filterMarket === m ? "#0a0d14" : "#8899aa", border: `1px solid ${filterMarket === m ? "#f5a623" : "#1e2535"}`, padding: "6px 14px", fontSize: 11, borderRadius: 3, letterSpacing: 1, whiteSpace: "nowrap" }}>
+                    {info.flag} {info.label}
+                  </button>
+                );
+              })}
             </div>
 
             {/* Stock cards */}
@@ -325,7 +360,7 @@ export default function App() {
                       <div>
                         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
                           <span style={{ fontSize: 18, fontWeight: 500, fontFamily: "Syne, sans-serif", color: "#e8eaf6" }}>{s.ticker}</span>
-                          <span className="tag" style={{ background: s.market === "US" ? "#1e3a5f" : "#1a3a2a", color: s.market === "US" ? "#5a9fd4" : "#4caf82" }}>{s.market === "US" ? "🇺🇸" : "🇰🇷"} {s.exchange}</span>
+                          <span className="tag" style={{ background: "#1e2a3a", color: "#7ab8d4" }}>{getMarketInfo(s.market).flag} {s.exchange}</span>
                         </div>
                         <div style={{ fontSize: 11, color: "#8899aa" }}>{s.name}</div>
                         <div style={{ fontSize: 10, color: "#556677", marginTop: 2 }}>{s.sector}</div>
@@ -463,8 +498,8 @@ export default function App() {
                 <div>
                   <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 6 }}>
                     <span style={{ fontFamily: "Syne, sans-serif", fontSize: 32, fontWeight: 800 }}>{selected.ticker}</span>
-                    <span className="tag" style={{ background: selected.market === "US" ? "#1e3a5f" : "#1a3a2a", color: selected.market === "US" ? "#5a9fd4" : "#4caf82", fontSize: 11 }}>
-                      {selected.market === "US" ? "🇺🇸 NASDAQ" : "🇰🇷 KRX"} · {selected.exchange}
+                    <span className="tag" style={{ background: "#1e2a3a", color: "#7ab8d4", fontSize: 11 }}>
+                      {getMarketInfo(selected.market).flag} {getMarketInfo(selected.market).label} · {selected.exchange}
                     </span>
                     {(() => { const vc = verdictColors[selected.verdictType] || verdictColors.watch; return <span className="tag" style={{ background: vc.bg, border: `1px solid ${vc.border}`, color: vc.text, fontSize: 11 }}>{selected.verdict}</span>; })()}
                   </div>
@@ -866,11 +901,10 @@ function StockForm({ stock, isEdit, onSave, onCancel, anthropicKey }) {
           <div className="card" style={{ padding: 20, marginBottom: 14 }}>
             <div className="section-label">기본 정보</div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-              <F label="Ticker"><input value={form.ticker} onChange={e => set("ticker", e.target.value.toUpperCase())} placeholder="AAPL" /></F>
+              <F label="Ticker"><input value={form.ticker} onChange={e => set("ticker", e.target.value.toUpperCase())} placeholder={TICKER_HINTS[form.market] || "티커 입력"} /></F>
               <F label="Market">
                 <select value={form.market} onChange={e => set("market", e.target.value)}>
-                  <option value="US">🇺🇸 US</option>
-                  <option value="KR">🇰🇷 KR</option>
+                  {MARKETS.map(m => <option key={m.value} value={m.value}>{m.flag} {m.label}</option>)}
                 </select>
               </F>
             </div>
@@ -888,8 +922,7 @@ function StockForm({ stock, isEdit, onSave, onCancel, anthropicKey }) {
               <F label="적정가"><input type="number" value={form.fairValue} onChange={e => set("fairValue", e.target.value)} placeholder="10.50" /></F>
               <F label="통화">
                 <select value={form.currency} onChange={e => set("currency", e.target.value)}>
-                  <option value="USD">USD ($)</option>
-                  <option value="KRW">KRW (₩)</option>
+                  {CURRENCIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
                 </select>
               </F>
             </div>
