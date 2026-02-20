@@ -168,7 +168,8 @@ export default function App() {
   const [editStock, setEditStock] = useState(null);
   const [searchQ, setSearchQ] = useState("");
   const [filterMarket, setFilterMarket] = useState("ALL");
-  const [watchTab, setWatchTab] = useState("전체"); // 전체 | 보유 | 관심
+  const [watchTab, setWatchTab] = useState("전체");
+  const [sortBy, setSortBy] = useState("added"); // added | upside | pnl | stale | sector
   const [memoEdit, setMemoEdit] = useState(false);
   const [tempMemo, setTempMemo] = useState("");
   const [loaded, setLoaded] = useState(false);
@@ -249,6 +250,32 @@ export default function App() {
     try { localStorage.setItem("stocks_v1", JSON.stringify(newStocks)); } catch {}
   };
 
+  const getCredScore = (s) => {
+    let score = 0;
+    // 시나리오 설정 여부 (30점)
+    const scenOk = s.scenarios.filter(sc => sc.price).length;
+    score += scenOk * 10;
+    // 핵심 인사이트 개수 (20점)
+    score += Math.min(s.keyPoints.length * 2, 20);
+    // 가정 테이블 (15점)
+    score += Math.min(s.assumptions.length * 5, 15);
+    // 이벤트 임팩트 (10점)
+    score += Math.min(s.events.length * 3, 10);
+    // 내러티브 길이 (10점)
+    score += s.narrative?.length > 200 ? 10 : s.narrative?.length > 50 ? 5 : 0;
+    // 출처 (10점)
+    score += Math.min(s.sources.length * 3, 10);
+    // 딜레이더 (5점)
+    score += s.dealRadar?.length > 20 ? 5 : 0;
+    return Math.min(score, 100);
+  };
+
+  const getCredLabel = (score) => {
+    if (score >= 80) return { label: "HIGH", color: "#00d27a" };
+    if (score >= 55) return { label: "MED", color: "#f5a623" };
+    return { label: "LOW", color: "#e74c3c" };
+  };
+
   const isStale = (s) => {
     if (!s.updatedAt) return false;
     const days = Math.floor((new Date() - new Date(s.updatedAt)) / (1000 * 60 * 60 * 24));
@@ -261,6 +288,17 @@ export default function App() {
     const matchMarket = filterMarket === "ALL" || s.market === filterMarket;
     const matchTab = watchTab === "전체" || (s.watchType || "보유") === watchTab;
     return matchSearch && matchMarket && matchTab;
+  }).sort((a, b) => {
+    if (sortBy === "upside") return parseFloat(getUpside(b.currentPrice, b.fairValue)) - parseFloat(getUpside(a.currentPrice, a.fairValue));
+    if (sortBy === "pnl") {
+      const pa = a.buyPrice ? ((a.currentPrice - parseFloat(a.buyPrice)) / parseFloat(a.buyPrice)) : -999;
+      const pb = b.buyPrice ? ((b.currentPrice - parseFloat(b.buyPrice)) / parseFloat(b.buyPrice)) : -999;
+      return pb - pa;
+    }
+    if (sortBy === "stale") return new Date(a.updatedAt) - new Date(b.updatedAt);
+    if (sortBy === "sector") return (a.sector || "").localeCompare(b.sector || "");
+    if (sortBy === "cred") return getCredScore(b) - getCredScore(a);
+    return 0; // added: original order
   });
 
   const openDetail = (s) => { setSelected(s); setView("detail"); setMemoEdit(false); };
@@ -392,11 +430,23 @@ export default function App() {
                 style={{ marginLeft: "auto", background: "transparent", color: "#3498db", border: "1px solid #3498db44", padding: "6px 16px", fontSize: 12, borderRadius: 3, cursor: "pointer", fontFamily: "DM Mono, monospace" }}>
                 ⚖ 종목 비교
               </button>
+              <button onClick={() => setView("sector")}
+                style={{ background: "transparent", color: "#9b59b6", border: "1px solid #9b59b644", padding: "6px 16px", fontSize: 12, borderRadius: 3, cursor: "pointer", fontFamily: "DM Mono, monospace" }}>
+                🏭 섹터별
+              </button>
             </div>
 
             {/* Filters */}
             <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
               <input placeholder="종목명 / 티커 / 섹터 검색..." value={searchQ} onChange={e => setSearchQ(e.target.value)} style={{ flex: 1, minWidth: 200 }} />
+              <select value={sortBy} onChange={e => setSortBy(e.target.value)} style={{ padding: "6px 12px", fontSize: 11, minWidth: 140 }}>
+                <option value="added">추가 순</option>
+                <option value="upside">업사이드 높은 순</option>
+                <option value="pnl">수익률 높은 순</option>
+                <option value="stale">분석 오래된 순</option>
+                <option value="cred">신뢰도 높은 순</option>
+                <option value="sector">섹터별</option>
+              </select>
               {["ALL","US","KR","HK","TW","CN_SH","CN_SZ"].map(m => {
                 const info = m === "ALL" ? { flag: "", label: "ALL" } : getMarketInfo(m);
                 return (
@@ -416,6 +466,8 @@ export default function App() {
                 const hasPF = s.buyPrice && s.quantity;
                 const pnl = hasPF ? ((s.currentPrice - parseFloat(s.buyPrice)) * parseFloat(s.quantity)) : null;
                 const pnlPct = hasPF ? (((s.currentPrice - parseFloat(s.buyPrice)) / parseFloat(s.buyPrice)) * 100).toFixed(1) : null;
+                const cred = getCredScore(s);
+                const credLabel = getCredLabel(cred);
                 return (
                   <div key={s.id} className="card fade-in" style={{ padding: 20, cursor: "pointer" }} onClick={() => openDetail(s)}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
@@ -458,8 +510,9 @@ export default function App() {
                         {isStale(s) && <span style={{ fontSize: 9, background: "#e74c3c22", border: "1px solid #e74c3c44", color: "#e74c3c", padding: "1px 6px", borderRadius: 3 }}>⚠ 업데이트 필요</span>}
                       </div>
                       <div style={{ display:"flex", gap:8, alignItems:"center" }}>
-                        <span style={{ fontSize: 9, color: (s.watchType||"보유") === "보유" ? "#00d27a" : "#3498db", background: (s.watchType||"보유") === "보유" ? "#00d27a11" : "#3498db11", padding: "1px 6px", borderRadius: 3, border: `1px solid ${(s.watchType||"보유") === "보유" ? "#00d27a33" : "#3498db33"}` }}>{(s.watchType||"보유") === "보유" ? "📊 보유" : "👀 관심"}</span>
-                        {hasPF && <span style={{ fontSize:11, color: pnl>=0?"#00d27a":"#e74c3c", fontWeight:500 }}>{pnl>=0?"+":""}{pnlPct}% P&L</span>}
+                        <span title="분석 신뢰도 스코어" style={{ fontSize: 9, color: credLabel.color, background: credLabel.color + "11", border: `1px solid ${credLabel.color}33`, padding: "1px 6px", borderRadius: 3 }}>신뢰도 {cred}</span>
+                        <span style={{ fontSize: 9, color: (s.watchType||"보유") === "보유" ? "#00d27a" : "#3498db", background: (s.watchType||"보유") === "보유" ? "#00d27a11" : "#3498db11", padding: "1px 6px", borderRadius: 3, border: `1px solid ${(s.watchType||"보유") === "보유" ? "#00d27a33" : "#3498db33"}` }}>{(s.watchType||"보유") === "보유" ? "📊" : "👀"}</span>
+                        {hasPF && <span style={{ fontSize:11, color: pnl>=0?"#00d27a":"#e74c3c", fontWeight:500 }}>{pnl>=0?"+":""}{pnlPct}%</span>}
                         {s.history?.length > 0 && <span style={{ fontSize:9, color:"#556677", background:"#1e2535", padding:"2px 6px", borderRadius:3 }}>📅 {s.history.length}</span>}
                       </div>
                     </div>
@@ -574,10 +627,21 @@ export default function App() {
                       {getMarketInfo(selected.market).flag} {getMarketInfo(selected.market).label} · {selected.exchange}
                     </span>
                     {(() => { const vc = verdictColors[selected.verdictType] || verdictColors.watch; return <span className="tag" style={{ background: vc.bg, border: `1px solid ${vc.border}`, color: vc.text, fontSize: 11 }}>{selected.verdict}</span>; })()}
+                    {/* Credibility Score */}
+                    {(() => {
+                      const cred = getCredScore(selected);
+                      const cl = getCredLabel(cred);
+                      return (
+                        <span title="분석 신뢰도 스코어 (시나리오·인사이트·가정·출처 등 기반 자동 채점)" style={{ fontSize: 11, color: cl.color, background: cl.color + "15", border: `1px solid ${cl.color}44`, padding: "2px 8px", borderRadius: 3, cursor: "help" }}>
+                          신뢰도 {cred}/100 · {cl.label}
+                        </span>
+                      );
+                    })()}
                   </div>
                   <div style={{ color: "#8899aa", fontSize: 14 }}>{selected.name} · {selected.sector}</div>
                 </div>
-                <div style={{ display: "flex", gap: 8 }}>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <GrokPromptButton stock={selected} />
                   <button className="btn-outline" onClick={() => { setEditStock({ ...selected }); setView("edit"); }}>EDIT</button>
                   <button className="btn-danger" onClick={() => setShowDeleteConfirm(true)}>DELETE</button>
                 </div>
@@ -842,6 +906,59 @@ export default function App() {
             </div>
           </div>
         )}
+        {/* SECTOR VIEW */}
+        {view === "sector" && (
+          <div className="fade-in">
+            <div style={{ fontFamily: "Syne, sans-serif", fontSize: 22, fontWeight: 800, marginBottom: 20 }}>🏭 섹터별 뷰</div>
+            {(() => {
+              const sectors = {};
+              stocks.forEach(s => {
+                const sec = s.sector || "미분류";
+                if (!sectors[sec]) sectors[sec] = [];
+                sectors[sec].push(s);
+              });
+              return Object.entries(sectors).sort((a, b) => b[1].length - a[1].length).map(([sector, secs]) => {
+                const avgUpside = (secs.reduce((acc, s) => acc + parseFloat(getUpside(s.currentPrice, s.fairValue)), 0) / secs.length).toFixed(1);
+                const buyCount = secs.filter(s => s.verdictType === "buy").length;
+                return (
+                  <div key={sector} className="card" style={{ padding: 20, marginBottom: 14 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                      <div>
+                        <div style={{ fontFamily: "Syne, sans-serif", fontSize: 16, fontWeight: 700, color: "#e8eaf6" }}>{sector}</div>
+                        <div style={{ fontSize: 11, color: "#556677", marginTop: 2 }}>
+                          {secs.length}개 종목 · 평균 업사이드 <span style={{ color: parseFloat(avgUpside) > 0 ? "#00d27a" : "#e74c3c" }}>{parseFloat(avgUpside) > 0 ? "+" : ""}{avgUpside}%</span> · BUY {buyCount}개
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", height: 6, width: 120, borderRadius: 3, overflow: "hidden", gap: 2 }}>
+                        {secs.map(s => { const vc = verdictColors[s.verdictType] || verdictColors.watch; return <div key={s.id} style={{ flex: 1, background: vc.border }} />; })}
+                      </div>
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 8 }}>
+                      {secs.map(s => {
+                        const upside = getUpside(s.currentPrice, s.fairValue);
+                        const vc = verdictColors[s.verdictType] || verdictColors.watch;
+                        return (
+                          <div key={s.id} onClick={() => { setSelected(s); setView("detail"); }}
+                            style={{ background: "#0a0d14", border: "1px solid #1e2535", borderRadius: 6, padding: "10px 14px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <div>
+                              <div style={{ fontSize: 13, fontWeight: 500, color: "#e8eaf6" }}>{s.ticker}</div>
+                              <div style={{ fontSize: 10, color: "#556677" }}>{s.name}</div>
+                            </div>
+                            <div style={{ textAlign: "right" }}>
+                              <div style={{ fontSize: 12, color: parseFloat(upside) > 0 ? "#00d27a" : "#e74c3c", fontWeight: 500 }}>{parseFloat(upside) > 0 ? "+" : ""}{upside}%</div>
+                              <div style={{ fontSize: 9, color: vc.text }}>{s.verdict}</div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              });
+            })()}
+          </div>
+        )}
+
         {(view === "add" || view === "edit") && editStock && (
           <StockForm
             stock={editStock}
@@ -1184,9 +1301,28 @@ function NewsFeed({ ticker, name }) {
   const [news, setNews] = useState([]);
   const [fallbackLinks, setFallbackLinks] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [loaded, setLoaded] = useState(false);
+  const [lastFetched, setLastFetched] = useState(null);
 
-  const fetchNews = async () => {
+  const CACHE_KEY = `news_${ticker}`;
+  const CACHE_TTL = 60 * 60 * 1000; // 1시간
+
+  const fetchNews = async (force = false) => {
+    // 캐시 확인
+    if (!force) {
+      try {
+        const cached = localStorage.getItem(CACHE_KEY);
+        if (cached) {
+          const { data, timestamp } = JSON.parse(cached);
+          if (Date.now() - timestamp < CACHE_TTL) {
+            setNews(data.news || []);
+            setFallbackLinks(data.fallbackLinks || []);
+            setLastFetched(new Date(timestamp).toLocaleTimeString("ko-KR"));
+            return;
+          }
+        }
+      } catch {}
+    }
+
     setLoading(true);
     try {
       const res = await fetch("/api/news", {
@@ -1197,26 +1333,31 @@ function NewsFeed({ ticker, name }) {
       const data = await res.json();
       setNews(data.news || []);
       setFallbackLinks(data.fallbackLinks || []);
+      // 캐시 저장
+      try {
+        localStorage.setItem(CACHE_KEY, JSON.stringify({ data, timestamp: Date.now() }));
+      } catch {}
+      setLastFetched(new Date().toLocaleTimeString("ko-KR"));
     } catch {}
     setLoading(false);
-    setLoaded(true);
   };
+
+  // 페이지 열리면 자동 로드
+  useEffect(() => { fetchNews(); }, [ticker]);
 
   return (
     <div className="card" style={{ padding: "20px", marginBottom: 16 }}>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
-        <div className="section-label" style={{ margin:0 }}>📰 최신 뉴스</div>
-        <button className="btn-outline" style={{ fontSize:10, padding:"4px 12px" }} onClick={fetchNews} disabled={loading}>
-          {loading ? "⟳ 로딩중..." : loaded ? "⟳ 새로고침" : "뉴스 불러오기"}
+        <div>
+          <div className="section-label" style={{ margin: 0 }}>📰 최신 뉴스</div>
+          {lastFetched && <div style={{ fontSize: 9, color: "#556677", marginTop: 2 }}>마지막 갱신: {lastFetched} · 1시간 캐싱</div>}
+        </div>
+        <button className="btn-outline" style={{ fontSize:10, padding:"4px 12px" }} onClick={() => fetchNews(true)} disabled={loading}>
+          {loading ? "⟳ 로딩중..." : "⟳ 새로고침"}
         </button>
       </div>
-      {!loaded && !loading && (
-        <div style={{ fontSize:12, color:"#556677", textAlign:"center", padding:"16px 0" }}>
-          버튼을 눌러 {ticker} 관련 최신 뉴스를 확인하세요
-        </div>
-      )}
       {loading && <div style={{ fontSize:12, color:"#f5a623", textAlign:"center", padding:"16px 0" }}>⟳ 뉴스 수집중...</div>}
-      {loaded && news.length === 0 && (
+      {!loading && news.length === 0 && fallbackLinks.length > 0 && (
         <div>
           <div style={{ fontSize:12, color:"#556677", marginBottom:12 }}>직접 확인해보세요:</div>
           <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
@@ -1294,5 +1435,97 @@ function HistorySection({ stock }) {
         })}
       </div>
     </div>
+  );
+}
+
+// ── GROK PROMPT BUTTON ─────────────────────────────────────────────
+function GrokPromptButton({ stock }) {
+  const [copied, setCopied] = useState(false);
+  const [show, setShow] = useState(false);
+
+  const prompt = `아래 양식에 맞춰서 ${stock.ticker} (${stock.name}) 주식 분석을 해줘. 기존 분석이 있으면 업데이트해줘.
+
+[분석 요청 종목]
+티커: ${stock.ticker}
+회사명: ${stock.name}
+마켓: ${stock.market}
+섹터: ${stock.sector || "확인 필요"}
+현재가: ${stock.currentPrice ? stock.currentPrice + " " + stock.currency : "확인 필요"}
+기존 적정가: ${stock.fairValue ? stock.fairValue + " " + stock.currency : "미입력"}
+
+[요청 항목]
+1. 현재가 확인 및 업데이트 (Yahoo Finance / MarketScreener 등 실제 기준)
+2. DCF + Comps 기반 적정가 산출
+3. Bull/Base/Bear 시나리오 (확률 합계 100%)
+4. 핵심 인사이트 10가지
+5. 이벤트별 주가 영향 (+/-%)
+6. 가정 테이블 (항목/적용값/근거/민감도)
+7. 딜 레이더 (M&A, 파트너십, 규제 이슈 등)
+8. 한줄 투자 판단
+
+[출력 양식]
+아래 형식을 반드시 지켜줘:
+
+EQUITY ANALYSIS DASHBOARD
+${stock.name}
+[티커 마켓:티커심볼]
+[CURRENT PRICE] (실제 가격 Yahoo Finance 기준)
+[FAIR VALUE (EST.)] (DCF+Comps 기반 추정)
+▲/▼ X% Upside/Downside
+ONE-LINE VERDICT: (한줄 판단)
+NARRATIVE: (3-5문장)
+🎯 핵심 인사이트 10 Key Points
+① ~ ⑩ (각 항목별 한줄 인사이트)
+🔍 딜 레이더
+So What — 투자 판단 요약
+■ 확률 가중 적정가
+Bull X% × 가격 = 금액
+Base X% × 가격 = 금액
+Bear X% × 가격 = 금액
+→ 확률가중 적정가: (합계)
+■ 이벤트별 주가 영향
+■ 가정 테이블 (항목|적용값|근거|민감도)
+
+출처는 모두 [실제] 또는 [추정] 표기 필수.`;
+
+  const copy = () => {
+    navigator.clipboard.writeText(prompt).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  return (
+    <>
+      <button className="btn-ghost" style={{ fontSize: 11, padding: "5px 12px", color: "#9b59b6", border: "1px solid #9b59b644" }}
+        onClick={() => setShow(true)}>
+        🤖 Grok 프롬프트
+      </button>
+      {show && (
+        <div style={{ position: "fixed", inset: 0, background: "#000000aa", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}
+          onClick={() => setShow(false)}>
+          <div style={{ background: "#0f1420", border: "1px solid #1e2535", borderRadius: 10, padding: 24, maxWidth: 640, width: "100%", maxHeight: "80vh", display: "flex", flexDirection: "column" }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+              <div style={{ fontFamily: "Syne, sans-serif", fontSize: 15, fontWeight: 700 }}>🤖 Grok 분석 프롬프트</div>
+              <button className="btn-ghost" style={{ fontSize: 11 }} onClick={() => setShow(false)}>✕ 닫기</button>
+            </div>
+            <div style={{ fontSize: 10, color: "#556677", marginBottom: 12 }}>
+              아래 프롬프트를 복사해서 Grok에 붙여넣으면 분석 양식에 맞는 결과를 받을 수 있어요.
+            </div>
+            <textarea readOnly value={prompt} rows={12}
+              style={{ fontSize: 11, color: "#a0aab8", background: "#0a0d14", border: "1px solid #1e2535", borderRadius: 6, padding: 12, resize: "none", flex: 1, lineHeight: 1.7 }} />
+            <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+              <button className="btn-gold" style={{ flex: 1 }} onClick={copy}>
+                {copied ? "✓ 복사됨!" : "📋 프롬프트 복사"}
+              </button>
+              <a href="https://grok.com" target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>
+                <button className="btn-outline" style={{ whiteSpace: "nowrap" }}>Grok 열기 →</button>
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
