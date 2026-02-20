@@ -337,7 +337,8 @@ export default function App() {
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@700;800&display=swap');
         ::-webkit-scrollbar { width: 4px; } ::-webkit-scrollbar-track { background: #0a0d14; } ::-webkit-scrollbar-thumb { background: #f5a623; border-radius: 2px; }
-        * { box-sizing: border-box; margin: 0; padding: 0; }
+        * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+        body { overflow-x: hidden; }
         input, textarea, select { background: #0f1420; border: 1px solid #1e2535; color: #e8eaf6; padding: 8px 12px; border-radius: 4px; font-family: 'DM Mono', monospace; font-size: 13px; outline: none; width: 100%; }
         input:focus, textarea:focus, select:focus { border-color: #f5a623; }
         button { cursor: pointer; font-family: 'DM Mono', monospace; }
@@ -350,7 +351,7 @@ export default function App() {
         .btn-danger { background: transparent; color: #e74c3c; border: 1px solid #e74c3c44; padding: 7px 16px; font-size: 12px; border-radius: 3px; transition: all 0.2s; }
         .btn-danger:hover { background: #e74c3c22; }
         .card { background: #0f1420; border: 1px solid #1e2535; border-radius: 8px; transition: border-color 0.2s, transform 0.15s; }
-        .card:hover { border-color: #f5a62344; transform: translateY(-1px); }
+        .card:hover { border-color: #f5a62344; }
         .tag { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 10px; letter-spacing: 1px; text-transform: uppercase; font-weight: 500; }
         .divider { border: none; border-top: 1px solid #1e2535; margin: 20px 0; }
         .section-label { color: #f5a623; font-size: 10px; letter-spacing: 3px; text-transform: uppercase; margin-bottom: 12px; }
@@ -360,20 +361,93 @@ export default function App() {
         .fade-in { animation: fadeIn 0.3s ease; }
         @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
         .live-dot { width: 6px; height: 6px; border-radius: 50%; background: #00d27a; animation: pulse 2s infinite; display: inline-block; margin-right: 6px; }
+
+        /* ── 모바일 바텀 네비 ── */
+        .mobile-nav { display: none; }
+        .desktop-nav { display: flex; }
+
+        /* ── 모바일 미디어쿼리 ── */
+        .mobile-quick-actions { display: none; }
+        @media (max-width: 768px) {
+          .card:hover { transform: none; }
+          .mobile-quick-actions { display: flex !important; }
+
+          /* 바텀 네비 */
+          .mobile-nav {
+            display: flex; position: fixed; bottom: 0; left: 0; right: 0; z-index: 200;
+            background: #080b11; border-top: 1px solid #1e2535;
+            padding: 8px 0 max(8px, env(safe-area-inset-bottom));
+            justify-content: space-around; align-items: center;
+          }
+          .mobile-nav-btn {
+            display: flex; flex-direction: column; align-items: center; gap: 3px;
+            background: transparent; border: none; color: #556677; font-size: 9px;
+            padding: 4px 8px; min-width: 56px; letter-spacing: 0.5px;
+          }
+          .mobile-nav-btn.active { color: #f5a623; }
+          .mobile-nav-icon { font-size: 18px; line-height: 1; }
+
+          /* 상단 네비 심플하게 */
+          .desktop-nav { display: none; }
+          .top-nav-title { font-size: 15px !important; }
+          .top-nav-subtitle { display: none; }
+
+          /* 본문 패딩 (바텀 네비 여백) */
+          .main-content { padding-bottom: 80px !important; }
+
+          /* 필터 세로 스택 */
+          .filter-row { flex-direction: column !important; gap: 8px !important; }
+          .market-filters { display: flex; flex-wrap: wrap; gap: 6px; }
+          .market-filters button { font-size: 10px !important; padding: 5px 10px !important; }
+
+          /* 탭 버튼 */
+          .watch-tab-row { flex-wrap: wrap; gap: 6px !important; }
+          .view-btns { display: flex; gap: 6px; }
+          .view-btns button { font-size: 10px !important; padding: 5px 10px !important; }
+
+          /* 종목 카드 한 줄 */
+          .stock-grid { grid-template-columns: 1fr !important; }
+
+          /* 상세뷰 가격 2x2 */
+          .price-row { grid-template-columns: 1fr 1fr !important; }
+
+          /* 비교 테이블 스크롤 */
+          .compare-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+          /* 섹터뷰 그리드 1열 */
+          .sector-grid { grid-template-columns: 1fr !important; }
+
+          /* 상세뷰 헤더 버튼 wrap */
+          .detail-header { flex-direction: column !important; align-items: flex-start !important; gap: 12px !important; }
+          .detail-action-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+
+          /* HAKS 컨센서스 그리드 */
+          .consensus-grid { grid-template-columns: 1fr !important; gap: 8px !important; }
+
+          /* AI 분석 depth 선택 */
+          .depth-selector { flex-direction: column !important; }
+
+          /* 폼 */
+          .form-grid { grid-template-columns: 1fr !important; }
+
+          /* 섹터/비교 결과 그리드 */
+          .result-grid { grid-template-columns: 1fr !important; }
+        }
       `}</style>
 
       {/* TOP NAV */}
-      <div style={{ background: "#080b11", borderBottom: "1px solid #1e2535", padding: "0 20px", display: "flex", alignItems: "center", justifyContent: "space-between", height: 52, position: "sticky", top: 0, zIndex: 100 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+      <div style={{ background: "#080b11", borderBottom: "1px solid #1e2535", padding: "0 16px", display: "flex", alignItems: "center", justifyContent: "space-between", height: 52, position: "sticky", top: 0, zIndex: 100 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           {(view !== "dashboard") && (
             <button className="btn-ghost" style={{ padding: "4px 10px", fontSize: 11 }} onClick={goBack}>← BACK</button>
           )}
-          <div style={{ fontFamily: "Syne, sans-serif", fontSize: 18, fontWeight: 800, color: "#f5a623", letterSpacing: 2 }}>
+          <div className="top-nav-title" style={{ fontFamily: "Syne, sans-serif", fontSize: 18, fontWeight: 800, color: "#f5a623", letterSpacing: 2 }}>
             ANALYST<span style={{ color: "#e8eaf6", fontWeight: 700 }}>OS</span>
           </div>
-          <div style={{ fontSize: 10, color: "#8899aa", letterSpacing: 1 }}>PRIVATE RESEARCH DESK</div>
+          <div className="top-nav-subtitle" style={{ fontSize: 10, color: "#8899aa", letterSpacing: 1 }}>PRIVATE RESEARCH DESK</div>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        {/* Desktop nav buttons */}
+        <div className="desktop-nav" style={{ alignItems: "center", gap: 8 }}>
           {apiKey ? (
             <><span className="live-dot" /><span style={{ fontSize: 10, color: "#00d27a" }}>LIVE</span></>
           ) : (
@@ -381,25 +455,41 @@ export default function App() {
           )}
           {view === "dashboard" && (
             <>
-              <button className="btn-ghost" style={{ fontSize: 11, padding: "5px 12px" }}
-                onClick={() => setView("settings")} title="API 설정">⚙ API 설정</button>
-              <button className="btn-outline" style={{ fontSize: 11, padding: "5px 12px", opacity: refreshing ? 0.5 : 1 }}
-                onClick={refreshAllPrices} disabled={refreshing} title="전체 주가 갱신">
+              <button className="btn-ghost" style={{ fontSize: 11, padding: "5px 12px" }} onClick={() => setView("settings")}>⚙ API 설정</button>
+              <button className="btn-outline" style={{ fontSize: 11, padding: "5px 12px", opacity: refreshing ? 0.5 : 1 }} onClick={refreshAllPrices} disabled={refreshing}>
                 {refreshing ? "⟳ 갱신중..." : "⟳ 주가 갱신"}
               </button>
-              <button className="btn-gold" style={{ background: "#9b59b6", borderColor: "#9b59b6" }}
-                onClick={() => setView("ai-analyze")}>
-                🤖 AI 분석
-              </button>
-              <button className="btn-gold" onClick={() => { setEditStock({ ...EMPTY_STOCK, id: Date.now().toString() }); setView("add"); }}>
-                + ADD STOCK
-              </button>
+              <button className="btn-gold" style={{ background: "#9b59b6", borderColor: "#9b59b6" }} onClick={() => setView("ai-analyze")}>🤖 AI 분석</button>
+              <button className="btn-gold" onClick={() => { setEditStock({ ...EMPTY_STOCK, id: Date.now().toString() }); setView("add"); }}>+ ADD STOCK</button>
             </>
           )}
         </div>
+        {/* Mobile: live indicator only */}
+        <div style={{ display: "flex", alignItems: "center" }}>
+          {apiKey
+            ? <><span className="live-dot" /><span style={{ fontSize: 9, color: "#00d27a" }}>LIVE</span></>
+            : <span style={{ fontSize: 9, color: "#556677" }}>MANUAL</span>
+          }
+        </div>
       </div>
 
-      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "24px 16px" }}>
+      {/* MOBILE BOTTOM NAV */}
+      <div className="mobile-nav">
+        {[
+          { icon: "📊", label: "홈", action: () => setView("dashboard"), active: view === "dashboard" },
+          { icon: "🤖", label: "AI분석", action: () => setView("ai-analyze"), active: view === "ai-analyze" },
+          { icon: "⚖", label: "비교", action: () => setView("compare"), active: view === "compare" },
+          { icon: "🏭", label: "섹터", action: () => setView("sector"), active: view === "sector" },
+          { icon: "⚙", label: "설정", action: () => setView("settings"), active: view === "settings" },
+        ].map(item => (
+          <button key={item.label} className={`mobile-nav-btn ${item.active ? "active" : ""}`} onClick={item.action}>
+            <span className="mobile-nav-icon">{item.icon}</span>
+            {item.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="main-content" style={{ maxWidth: 1100, margin: "0 auto", padding: "20px 12px" }}>
 
         {/* DASHBOARD */}
         {view === "dashboard" && (
@@ -420,49 +510,59 @@ export default function App() {
             </div>
 
             {/* Watch tabs */}
-            <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+            <div className="watch-tab-row" style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
               {["전체", "보유", "관심"].map(tab => (
                 <button key={tab} onClick={() => setWatchTab(tab)}
-                  style={{ background: watchTab === tab ? "#f5a623" : "transparent", color: watchTab === tab ? "#0a0d14" : "#8899aa", border: `1px solid ${watchTab === tab ? "#f5a623" : "#1e2535"}`, padding: "6px 20px", fontSize: 12, borderRadius: 3, cursor: "pointer", fontFamily: "DM Mono, monospace" }}>
+                  style={{ background: watchTab === tab ? "#f5a623" : "transparent", color: watchTab === tab ? "#0a0d14" : "#8899aa", border: `1px solid ${watchTab === tab ? "#f5a623" : "#1e2535"}`, padding: "6px 14px", fontSize: 12, borderRadius: 3, cursor: "pointer", fontFamily: "DM Mono, monospace" }}>
                   {tab === "보유" ? "📊 보유" : tab === "관심" ? "👀 관심" : "전체"}
-                  <span style={{ marginLeft: 6, fontSize: 10, opacity: 0.7 }}>
+                  <span style={{ marginLeft: 4, fontSize: 10, opacity: 0.7 }}>
                     {tab === "전체" ? stocks.length : stocks.filter(s => (s.watchType || "보유") === tab).length}
                   </span>
                 </button>
               ))}
-              <button onClick={() => setView("compare")}
-                style={{ marginLeft: "auto", background: "transparent", color: "#3498db", border: "1px solid #3498db44", padding: "6px 16px", fontSize: 12, borderRadius: 3, cursor: "pointer", fontFamily: "DM Mono, monospace" }}>
-                ⚖ 종목 비교
-              </button>
-              <button onClick={() => setView("sector")}
-                style={{ background: "transparent", color: "#9b59b6", border: "1px solid #9b59b644", padding: "6px 16px", fontSize: 12, borderRadius: 3, cursor: "pointer", fontFamily: "DM Mono, monospace" }}>
-                🏭 섹터별
-              </button>
+              <div className="view-btns" style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+                <button onClick={() => setView("compare")}
+                  style={{ background: "transparent", color: "#3498db", border: "1px solid #3498db44", padding: "6px 12px", fontSize: 11, borderRadius: 3, cursor: "pointer", fontFamily: "DM Mono, monospace" }}>
+                  ⚖ 비교
+                </button>
+                <button onClick={() => setView("sector")}
+                  style={{ background: "transparent", color: "#9b59b6", border: "1px solid #9b59b644", padding: "6px 12px", fontSize: 11, borderRadius: 3, cursor: "pointer", fontFamily: "DM Mono, monospace" }}>
+                  🏭 섹터
+                </button>
+              </div>
             </div>
 
             {/* Filters */}
-            <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
-              <input placeholder="종목명 / 티커 / 섹터 검색..." value={searchQ} onChange={e => setSearchQ(e.target.value)} style={{ flex: 1, minWidth: 200 }} />
-              <select value={sortBy} onChange={e => setSortBy(e.target.value)} style={{ padding: "6px 12px", fontSize: 11, minWidth: 140 }}>
+            <div className="filter-row" style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
+              <input placeholder="검색..." value={searchQ} onChange={e => setSearchQ(e.target.value)} style={{ flex: 1, minWidth: 140 }} />
+              <select value={sortBy} onChange={e => setSortBy(e.target.value)} style={{ padding: "6px 10px", fontSize: 11 }}>
                 <option value="added">추가 순</option>
-                <option value="upside">업사이드 높은 순</option>
-                <option value="pnl">수익률 높은 순</option>
-                <option value="stale">분석 오래된 순</option>
-                <option value="cred">신뢰도 높은 순</option>
+                <option value="upside">업사이드 순</option>
+                <option value="pnl">수익률 순</option>
+                <option value="stale">오래된 순</option>
+                <option value="cred">신뢰도 순</option>
                 <option value="sector">섹터별</option>
               </select>
-              {["ALL","US","KR","HK","TW","CN_SH","CN_SZ"].map(m => {
-                const info = m === "ALL" ? { flag: "", label: "ALL" } : getMarketInfo(m);
-                return (
-                  <button key={m} onClick={() => setFilterMarket(m)} style={{ background: filterMarket === m ? "#f5a623" : "transparent", color: filterMarket === m ? "#0a0d14" : "#8899aa", border: `1px solid ${filterMarket === m ? "#f5a623" : "#1e2535"}`, padding: "6px 14px", fontSize: 11, borderRadius: 3, letterSpacing: 1, whiteSpace: "nowrap" }}>
-                    {info.flag} {info.label}
-                  </button>
-                );
-              })}
+              <div className="market-filters" style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {["ALL","US","KR","HK","TW","CN_SH","CN_SZ"].map(m => {
+                  const info = m === "ALL" ? { flag: "", label: "ALL" } : getMarketInfo(m);
+                  return (
+                    <button key={m} onClick={() => setFilterMarket(m)} style={{ background: filterMarket === m ? "#f5a623" : "transparent", color: filterMarket === m ? "#0a0d14" : "#8899aa", border: `1px solid ${filterMarket === m ? "#f5a623" : "#1e2535"}`, padding: "5px 10px", fontSize: 11, borderRadius: 3, whiteSpace: "nowrap" }}>
+                      {info.flag} {info.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Mobile: quick action buttons */}
+            <div style={{ display: "flex", gap: 8, marginBottom: 14 }} className="mobile-quick-actions">
+              <button className="btn-gold" style={{ flex: 1, background: "#9b59b6", fontSize: 12 }} onClick={() => setView("ai-analyze")}>🤖 AI 분석</button>
+              <button className="btn-gold" style={{ flex: 1, fontSize: 12 }} onClick={() => { setEditStock({ ...EMPTY_STOCK, id: Date.now().toString() }); setView("add"); }}>+ ADD STOCK</button>
             </div>
 
             {/* Stock cards */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 14 }}>
+            <div className="stock-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 14 }}>
               {filtered.map(s => {
                 const upside = getUpside(s.currentPrice, s.fairValue);
                 const vc = verdictColors[s.verdictType] || verdictColors.watch;
@@ -477,26 +577,26 @@ export default function App() {
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
                       <div>
                         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                          <span style={{ fontSize: 18, fontWeight: 500, fontFamily: "Syne, sans-serif", color: "#e8eaf6" }}>{s.ticker}</span>
+                          <span style={{ fontSize: 20, fontWeight: 600, fontFamily: "Syne, sans-serif", color: "#e8eaf6" }}>{s.ticker}</span>
                           <span className="tag" style={{ background: "#1e2a3a", color: "#7ab8d4" }}>{getMarketInfo(s.market).flag} {s.exchange}</span>
                         </div>
-                        <div style={{ fontSize: 11, color: "#8899aa" }}>{s.name}</div>
-                        <div style={{ fontSize: 10, color: "#556677", marginTop: 2 }}>{s.sector}</div>
+                        <div style={{ fontSize: 13, color: "#8899aa" }}>{s.name}</div>
+                        <div style={{ fontSize: 11, color: "#556677", marginTop: 2 }}>{s.sector}</div>
                       </div>
                       <span className="tag" style={{ background: vc.bg, border: `1px solid ${vc.border}`, color: vc.text }}>{s.verdict}</span>
                     </div>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 14 }}>
                       <div>
                         <div style={{ fontSize: 9, color: "#556677", letterSpacing: 1, marginBottom: 3 }}>CURRENT</div>
-                        <div style={{ fontSize: 16, fontWeight: 500 }}>{formatPrice(s.currentPrice, s.currency)}</div>
+                        <div style={{ fontSize: 17, fontWeight: 500 }}>{formatPrice(s.currentPrice, s.currency)}</div>
                       </div>
                       <div>
                         <div style={{ fontSize: 9, color: "#556677", letterSpacing: 1, marginBottom: 3 }}>FAIR VALUE</div>
-                        <div style={{ fontSize: 16, fontWeight: 500, color: "#f5a623" }}>{formatPrice(s.fairValue, s.currency)}</div>
+                        <div style={{ fontSize: 17, fontWeight: 500, color: "#f5a623" }}>{formatPrice(s.fairValue, s.currency)}</div>
                       </div>
                       <div>
                         <div style={{ fontSize: 9, color: "#556677", letterSpacing: 1, marginBottom: 3 }}>UPSIDE</div>
-                        <div style={{ fontSize: 16, fontWeight: 500, color: isUp ? "#00d27a" : "#e74c3c" }}>{isUp ? "+" : ""}{upside}%</div>
+                        <div style={{ fontSize: 17, fontWeight: 600, color: isUp ? "#00d27a" : "#e74c3c" }}>{isUp ? "+" : ""}{upside}%</div>
                       </div>
                     </div>
                     {/* Mini scenario bar */}
@@ -661,7 +761,7 @@ export default function App() {
             </div>
 
             {/* Price row */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginBottom: 20 }}>
+            <div className="price-row" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginBottom: 20 }}>
               {[
                 { label: "CURRENT PRICE", value: formatPrice(selected.currentPrice, selected.currency), color: "#e8eaf6", editable: true },
                 { label: "FAIR VALUE (EST.)", value: formatPrice(selected.fairValue, selected.currency), color: "#f5a623" },
@@ -871,7 +971,7 @@ export default function App() {
         {view === "compare" && (
           <div className="fade-in">
             <div style={{ fontFamily: "Syne, sans-serif", fontSize: 22, fontWeight: 800, marginBottom: 20 }}>⚖ 종목 비교</div>
-            <div style={{ overflowX: "auto" }}>
+            <div className="compare-table-wrap" style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                 <thead>
                   <tr style={{ borderBottom: "2px solid #f5a62344" }}>
@@ -1061,21 +1161,30 @@ function StockForm({ stock, isEdit, onSave, onCancel, anthropicKey }) {
 
   const handleAutoParse = async () => {
     if (!pasteText.trim()) return;
-    if (!anthropicKey) { setParseError("⚙ API 설정에서 Anthropic API 키를 먼저 입력해주세요!"); return; }
     setParsing(true);
     setParseError("");
     setParseSuccess(false);
     try {
-      const parsed = await parseAnalysisWithAI(pasteText, anthropicKey);
-      setForm(f => ({ ...f, ...parsed, id: f.id }));
-      setKpText((parsed.keyPoints || []).map(k => `${k.label}: ${k.content}`).join("\n"));
-      setSourcesText((parsed.sources || []).join(", "));
-      setEventsText((parsed.events || []).map(e => `${e.event}|${e.impact}|${e.direction}`).join("\n"));
-      setAssText((parsed.assumptions || []).map(a => `${a.item}|${a.value}|${a.basis}|${a.sensitivity}`).join("\n"));
+      const res = await fetch("/api/parse", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: pasteText, anthropicKey }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      const method = data._method || "ai";
+      const warn = data._warn || "";
+      delete data._method; delete data._warn;
+      setForm(f => ({ ...f, ...data, id: f.id }));
+      setKpText((data.keyPoints || []).map(k => `${k.label}: ${k.content}`).join("\n"));
+      setSourcesText((data.sources || []).join(", "));
+      setEventsText((data.events || []).map(e => `${e.event}|${e.impact}|${e.direction}`).join("\n"));
+      setAssText((data.assumptions || []).map(a => `${a.item}|${a.value}|${a.basis}|${a.sensitivity}`).join("\n"));
       setParseSuccess(true);
       setPasteText("");
+      if (method === "regex") setParseError("⚡ 기본 파싱 완료 (API 키 없음) — 일부 항목 직접 확인해주세요");
     } catch (e) {
-      setParseError(`실패: ${e.message || "API 키를 확인하거나 잠시 후 다시 시도해주세요."}`);
+      setParseError(`실패: ${e.message || "잠시 후 다시 시도해주세요."}`);
     }
     setParsing(false);
   };
