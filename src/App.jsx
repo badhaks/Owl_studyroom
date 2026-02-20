@@ -162,6 +162,56 @@ function ChartLinks({ ticker, market }) {
 }
 
 export default function App() {
+  // ── 비밀번호 게이트 ──────────────────────────────────────────
+  const [authed, setAuthed] = useState(() => {
+    try { return localStorage.getItem("owl_auth") === "granted"; } catch { return false; }
+  });
+  const [pwInput, setPwInput] = useState("");
+  const [pwError, setPwError] = useState(false);
+
+  // 비밀번호 여기서 변경 가능 (sha256 없이 간단 비교)
+  const PASSWORD = "haks2026";
+
+  const handleLogin = () => {
+    if (pwInput === PASSWORD) {
+      try { localStorage.setItem("owl_auth", "granted"); } catch {}
+      setAuthed(true); setPwError(false);
+    } else {
+      setPwError(true);
+      setTimeout(() => setPwError(false), 1500);
+    }
+  };
+
+  if (!authed) return (
+    <div style={{ minHeight: "100vh", background: "#080b11", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "DM Mono, monospace" }}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@700;800&display=swap'); * { box-sizing: border-box; margin: 0; padding: 0; } input { background: #0f1420; border: 1px solid #1e2535; color: #e8eaf6; padding: 12px 16px; border-radius: 4px; font-family: 'DM Mono', monospace; font-size: 14px; outline: none; width: 100%; } input:focus { border-color: #f5a623; }`}</style>
+      <div style={{ textAlign: "center", width: 320 }}>
+        <div style={{ fontFamily: "Syne, sans-serif", fontSize: 28, fontWeight: 800, color: "#f5a623", letterSpacing: 3, marginBottom: 4 }}>
+          ANALYST<span style={{ color: "#e8eaf6" }}>OS</span>
+        </div>
+        <div style={{ fontSize: 10, color: "#556677", letterSpacing: 2, marginBottom: 40 }}>PRIVATE RESEARCH DESK</div>
+        <div style={{ background: "#0f1420", border: "1px solid #1e2535", borderRadius: 10, padding: 28 }}>
+          <div style={{ fontSize: 11, color: "#556677", letterSpacing: 2, marginBottom: 16 }}>ENTER PASSWORD</div>
+          <input
+            type="password"
+            value={pwInput}
+            onChange={e => setPwInput(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && handleLogin()}
+            placeholder="••••••••"
+            style={{ border: `1px solid ${pwError ? "#e74c3c" : "#1e2535"}`, marginBottom: 12, textAlign: "center", letterSpacing: 4, fontSize: 18 }}
+            autoFocus
+          />
+          {pwError && <div style={{ fontSize: 11, color: "#e74c3c", marginBottom: 10 }}>비밀번호가 틀렸어요</div>}
+          <button
+            onClick={handleLogin}
+            style={{ width: "100%", background: "#f5a623", color: "#0a0d14", border: "none", padding: "12px", fontSize: 12, fontWeight: 600, letterSpacing: 2, borderRadius: 4, cursor: "pointer", fontFamily: "DM Mono, monospace" }}>
+            ACCESS →
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
   const [stocks, setStocks] = useState(INITIAL_STOCKS);
   const [selected, setSelected] = useState(null);
   const [view, setView] = useState("dashboard");
@@ -553,12 +603,6 @@ export default function App() {
                   );
                 })}
               </div>
-            </div>
-
-            {/* Mobile: quick action buttons */}
-            <div style={{ display: "flex", gap: 8, marginBottom: 14 }} className="mobile-quick-actions">
-              <button className="btn-gold" style={{ flex: 1, background: "#9b59b6", fontSize: 12 }} onClick={() => setView("ai-analyze")}>🤖 AI 분석</button>
-              <button className="btn-gold" style={{ flex: 1, fontSize: 12 }} onClick={() => { setEditStock({ ...EMPTY_STOCK, id: Date.now().toString() }); setView("add"); }}>+ ADD STOCK</button>
             </div>
 
             {/* Stock cards */}
