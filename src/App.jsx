@@ -125,9 +125,10 @@ const EMPTY_STOCK = {
   ],
   weightedFV: "", events: [], assumptions: [],
   updatedAt: new Date().toISOString().slice(0, 10),
-  sources: [], memo: "",
+  sources: [], memo: "", memoLog: [],
   buyPrice: "", quantity: "",
   history: [],
+  watchType: "보유", // 보유 | 관심
 };
 
 function ChartLinks({ ticker, market }) {
@@ -163,10 +164,11 @@ function ChartLinks({ ticker, market }) {
 export default function App() {
   const [stocks, setStocks] = useState(INITIAL_STOCKS);
   const [selected, setSelected] = useState(null);
-  const [view, setView] = useState("dashboard"); // dashboard | detail | add | edit | settings
+  const [view, setView] = useState("dashboard");
   const [editStock, setEditStock] = useState(null);
   const [searchQ, setSearchQ] = useState("");
   const [filterMarket, setFilterMarket] = useState("ALL");
+  const [watchTab, setWatchTab] = useState("전체"); // 전체 | 보유 | 관심
   const [memoEdit, setMemoEdit] = useState(false);
   const [tempMemo, setTempMemo] = useState("");
   const [loaded, setLoaded] = useState(false);
@@ -247,20 +249,30 @@ export default function App() {
     try { localStorage.setItem("stocks_v1", JSON.stringify(newStocks)); } catch {}
   };
 
+  const isStale = (s) => {
+    if (!s.updatedAt) return false;
+    const days = Math.floor((new Date() - new Date(s.updatedAt)) / (1000 * 60 * 60 * 24));
+    return days >= 30;
+  };
+
   const filtered = stocks.filter(s => {
     const q = searchQ.toLowerCase();
     const matchSearch = !q || s.ticker.toLowerCase().includes(q) || s.name.toLowerCase().includes(q) || s.sector.toLowerCase().includes(q);
     const matchMarket = filterMarket === "ALL" || s.market === filterMarket;
-    return matchSearch && matchMarket;
+    const matchTab = watchTab === "전체" || (s.watchType || "보유") === watchTab;
+    return matchSearch && matchMarket && matchTab;
   });
 
   const openDetail = (s) => { setSelected(s); setView("detail"); setMemoEdit(false); };
   const goBack = () => { setSelected(null); setView("dashboard"); setShowDeleteConfirm(false); };
 
   const updateMemo = async () => {
-    const updated = stocks.map(s => s.id === selected.id ? { ...s, memo: tempMemo } : s);
+    const timestamp = new Date().toLocaleString("ko-KR");
+    const newLog = { text: tempMemo, savedAt: timestamp };
+    const memoLog = [...(selected.memoLog || []), newLog].slice(-30);
+    const updated = stocks.map(s => s.id === selected.id ? { ...s, memo: tempMemo, memoLog } : s);
     await save(updated);
-    setSelected({ ...selected, memo: tempMemo });
+    setSelected({ ...selected, memo: tempMemo, memoLog });
     setMemoEdit(false);
   };
 
@@ -315,7 +327,7 @@ export default function App() {
       {/* TOP NAV */}
       <div style={{ background: "#080b11", borderBottom: "1px solid #1e2535", padding: "0 20px", display: "flex", alignItems: "center", justifyContent: "space-between", height: 52, position: "sticky", top: 0, zIndex: 100 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          {view !== "dashboard" && (
+          {(view !== "dashboard") && (
             <button className="btn-ghost" style={{ padding: "4px 10px", fontSize: 11 }} onClick={goBack}>← BACK</button>
           )}
           <div style={{ fontFamily: "Syne, sans-serif", fontSize: 18, fontWeight: 800, color: "#f5a623", letterSpacing: 2 }}>
@@ -363,6 +375,23 @@ export default function App() {
                   <div style={{ fontSize: 26, fontWeight: 500, color: stat.color || "#e8eaf6", fontFamily: "Syne, sans-serif" }}>{stat.value}</div>
                 </div>
               ))}
+            </div>
+
+            {/* Watch tabs */}
+            <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+              {["전체", "보유", "관심"].map(tab => (
+                <button key={tab} onClick={() => setWatchTab(tab)}
+                  style={{ background: watchTab === tab ? "#f5a623" : "transparent", color: watchTab === tab ? "#0a0d14" : "#8899aa", border: `1px solid ${watchTab === tab ? "#f5a623" : "#1e2535"}`, padding: "6px 20px", fontSize: 12, borderRadius: 3, cursor: "pointer", fontFamily: "DM Mono, monospace" }}>
+                  {tab === "보유" ? "📊 보유" : tab === "관심" ? "👀 관심" : "전체"}
+                  <span style={{ marginLeft: 6, fontSize: 10, opacity: 0.7 }}>
+                    {tab === "전체" ? stocks.length : stocks.filter(s => (s.watchType || "보유") === tab).length}
+                  </span>
+                </button>
+              ))}
+              <button onClick={() => setView("compare")}
+                style={{ marginLeft: "auto", background: "transparent", color: "#3498db", border: "1px solid #3498db44", padding: "6px 16px", fontSize: 12, borderRadius: 3, cursor: "pointer", fontFamily: "DM Mono, monospace" }}>
+                ⚖ 종목 비교
+              </button>
             </div>
 
             {/* Filters */}
@@ -424,10 +453,14 @@ export default function App() {
                       </div>
                     </div>
                     <div style={{ marginTop: 12, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-                      <div style={{ fontSize: 10, color: "#556677" }}>Updated {s.updatedAt}</div>
+                      <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                        <span style={{ fontSize: 10, color: "#556677" }}>Updated {s.updatedAt}</span>
+                        {isStale(s) && <span style={{ fontSize: 9, background: "#e74c3c22", border: "1px solid #e74c3c44", color: "#e74c3c", padding: "1px 6px", borderRadius: 3 }}>⚠ 업데이트 필요</span>}
+                      </div>
                       <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                        <span style={{ fontSize: 9, color: (s.watchType||"보유") === "보유" ? "#00d27a" : "#3498db", background: (s.watchType||"보유") === "보유" ? "#00d27a11" : "#3498db11", padding: "1px 6px", borderRadius: 3, border: `1px solid ${(s.watchType||"보유") === "보유" ? "#00d27a33" : "#3498db33"}` }}>{(s.watchType||"보유") === "보유" ? "📊 보유" : "👀 관심"}</span>
                         {hasPF && <span style={{ fontSize:11, color: pnl>=0?"#00d27a":"#e74c3c", fontWeight:500 }}>{pnl>=0?"+":""}{pnlPct}% P&L</span>}
-                        {s.history?.length > 0 && <span style={{ fontSize:9, color:"#556677", background:"#1e2535", padding:"2px 6px", borderRadius:3 }}>📅 {s.history.length}개 히스토리</span>}
+                        {s.history?.length > 0 && <span style={{ fontSize:9, color:"#556677", background:"#1e2535", padding:"2px 6px", borderRadius:3 }}>📅 {s.history.length}</span>}
                       </div>
                     </div>
                   </div>
@@ -704,7 +737,7 @@ export default function App() {
             </div>
 
             {/* Memo */}
-            <div className="card" style={{ padding: "20px", marginBottom: 24 }}>
+            <div className="card" style={{ padding: "20px", marginBottom: 16 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
                 <div className="section-label" style={{ margin: 0 }}>📝 나만의 메모</div>
                 {!memoEdit ? (
@@ -721,6 +754,20 @@ export default function App() {
               ) : (
                 <div style={{ fontSize: 12, color: selected.memo ? "#a0aab8" : "#556677", lineHeight: 1.8, whiteSpace: "pre-wrap" }}>
                   {selected.memo || "메모를 추가해보세요..."}
+                </div>
+              )}
+              {/* Memo Log */}
+              {selected.memoLog?.length > 0 && (
+                <div style={{ marginTop: 16, borderTop: "1px solid #1e2535", paddingTop: 14 }}>
+                  <div style={{ fontSize: 10, color: "#556677", letterSpacing: 1, marginBottom: 10 }}>📅 메모 일지</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: 200, overflowY: "auto" }}>
+                    {[...selected.memoLog].reverse().map((log, i) => (
+                      <div key={i} style={{ background: "#0a0d14", borderRadius: 4, padding: "8px 12px", border: "1px solid #1e2535" }}>
+                        <div style={{ fontSize: 9, color: "#f5a623", marginBottom: 4 }}>{log.savedAt}</div>
+                        <div style={{ fontSize: 11, color: "#8899aa", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{log.text}</div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
@@ -743,7 +790,58 @@ export default function App() {
           </div>
         )}
 
-        {/* ADD / EDIT FORM */}
+        {/* COMPARE VIEW */}
+        {view === "compare" && (
+          <div className="fade-in">
+            <div style={{ fontFamily: "Syne, sans-serif", fontSize: 22, fontWeight: 800, marginBottom: 20 }}>⚖ 종목 비교</div>
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                <thead>
+                  <tr style={{ borderBottom: "2px solid #f5a62344" }}>
+                    {["종목", "마켓", "현재가", "적정가", "업사이드", "확률가중FV", "투자의견", "P&L", "분석일", "상태"].map(h => (
+                      <th key={h} style={{ padding: "10px 14px", textAlign: "left", color: "#f5a623", fontSize: 10, letterSpacing: 1, whiteSpace: "nowrap" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {stocks.map(s => {
+                    const upside = getUpside(s.currentPrice, s.fairValue);
+                    const vc = verdictColors[s.verdictType] || verdictColors.watch;
+                    const hasPF = s.buyPrice && s.quantity && s.currentPrice;
+                    const pnlPct = hasPF ? (((s.currentPrice - parseFloat(s.buyPrice)) / parseFloat(s.buyPrice)) * 100).toFixed(1) : null;
+                    return (
+                      <tr key={s.id} style={{ borderBottom: "1px solid #1e253533", cursor: "pointer" }}
+                        onClick={() => { setSelected(s); setView("detail"); }}>
+                        <td style={{ padding: "12px 14px" }}>
+                          <div style={{ fontWeight: 500, color: "#e8eaf6" }}>{s.ticker}</div>
+                          <div style={{ fontSize: 10, color: "#556677" }}>{s.name}</div>
+                        </td>
+                        <td style={{ padding: "12px 14px", color: "#8899aa" }}>{getMarketInfo(s.market).flag}</td>
+                        <td style={{ padding: "12px 14px", fontWeight: 500 }}>{formatPrice(s.currentPrice, s.currency)}</td>
+                        <td style={{ padding: "12px 14px", color: "#f5a623" }}>{formatPrice(s.fairValue, s.currency)}</td>
+                        <td style={{ padding: "12px 14px", color: parseFloat(upside) > 0 ? "#00d27a" : "#e74c3c", fontWeight: 500 }}>{upside > 0 ? "+" : ""}{upside}%</td>
+                        <td style={{ padding: "12px 14px", color: "#3498db" }}>{s.weightedFV ? formatPrice(s.weightedFV, s.currency) : "—"}</td>
+                        <td style={{ padding: "12px 14px" }}>
+                          <span className="tag" style={{ background: vc.bg, border: `1px solid ${vc.border}`, color: vc.text, fontSize: 9 }}>{s.verdict}</span>
+                        </td>
+                        <td style={{ padding: "12px 14px", color: pnlPct ? (parseFloat(pnlPct) >= 0 ? "#00d27a" : "#e74c3c") : "#556677" }}>
+                          {pnlPct ? `${parseFloat(pnlPct) >= 0 ? "+" : ""}${pnlPct}%` : "—"}
+                        </td>
+                        <td style={{ padding: "12px 14px", color: "#556677", whiteSpace: "nowrap" }}>
+                          {s.updatedAt}
+                          {isStale(s) && <span style={{ marginLeft: 4, fontSize: 9, color: "#e74c3c" }}>⚠</span>}
+                        </td>
+                        <td style={{ padding: "12px 14px" }}>
+                          <span style={{ fontSize: 9, color: (s.watchType||"보유") === "보유" ? "#00d27a" : "#3498db" }}>{(s.watchType||"보유") === "보유" ? "📊 보유" : "👀 관심"}</span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
         {(view === "add" || view === "edit") && editStock && (
           <StockForm
             stock={editStock}
@@ -927,7 +1025,12 @@ function StockForm({ stock, isEdit, onSave, onCancel, anthropicKey }) {
             </div>
             <F label="회사명"><input value={form.name} onChange={e => set("name", e.target.value)} placeholder="T1 ENERGY" /></F>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-              <F label="Exchange"><input value={form.exchange} onChange={e => set("exchange", e.target.value)} placeholder="NASDAQ / KOSPI" /></F>
+              <F label="보유/관심">
+                <select value={form.watchType || "보유"} onChange={e => set("watchType", e.target.value)}>
+                  <option value="보유">📊 보유 종목</option>
+                  <option value="관심">👀 관심 종목</option>
+                </select>
+              </F>
               <F label="Sector"><input value={form.sector} onChange={e => set("sector", e.target.value)} placeholder="Solar & Battery" /></F>
             </div>
           </div>
