@@ -1087,7 +1087,14 @@ export default function App() {
           </div>
         )}
         {/* AI ANALYZE VIEW */}
-        {view === "ai-analyze" && (
+        {view === "ai-analyze" && !isAdmin && (
+          <div className="fade-in" style={{ textAlign: "center", padding: "60px 20px" }}>
+            <div style={{ fontSize: 40, marginBottom: 16 }}>🔒</div>
+            <div style={{ fontSize: 16, color: "#e8eaf6", fontFamily: "Syne, sans-serif", fontWeight: 700, marginBottom: 8 }}>관리자 전용 기능</div>
+            <div style={{ fontSize: 12, color: "#556677" }}>AI 분석은 관리자만 사용할 수 있어요</div>
+          </div>
+        )}
+        {view === "ai-analyze" && isAdmin && (
           <AIAnalyzeView
             anthropicKey={anthropicKey}
             onSave={async (stock) => {
