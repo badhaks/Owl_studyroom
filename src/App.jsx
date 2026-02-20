@@ -4,9 +4,12 @@ import React, { useState, useEffect, useRef } from "react";
 // For KR stocks use ticker like "005930.KS" (Samsung)
 async function fetchLivePrice(ticker, market, apiKey) {
   if (!apiKey) return null;
+  // Alpha Vantage symbol formats
   const suffixMap = { KR: ".KS", HK: ".HK", TW: ".TW", CN_SH: ".SS", CN_SZ: ".SZ" };
   const suffix = suffixMap[market] || "";
-  const symbol = suffix ? `${ticker}${suffix}` : ticker;
+  // KR: pad to 6 digits for Yahoo/AV format
+  const t = market === "KR" ? ticker.padStart(6, "0") : ticker;
+  const symbol = suffix ? `${t}${suffix}` : t;
   const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${apiKey}`;
   try {
     const res = await fetch(url);
@@ -133,8 +136,15 @@ const EMPTY_STOCK = {
 };
 
 function getTVSymbol(ticker, market, exchange) {
-  const exMap = { NASDAQ:"NASDAQ", NYSE:"NYSE", KOSPI:"KRX", KOSDAQ:"KOSDAQ", HKEX:"HKEX", TWSE:"TWSE", SSE:"SSE", SZSE:"SZSE" };
-  const prefix = exMap[exchange] || (market==="KR"?"KRX":market==="HK"?"HKEX":market==="TW"?"TWSE":market==="CN_SH"?"SSE":market==="CN_SZ"?"SZSE":"NASDAQ");
+  // TradingView specific symbol formats
+  if (market === "KR") return `KRX:${ticker}`;
+  if (market === "HK") return `HKEX:${parseInt(ticker, 10)}`; // remove leading zeros
+  if (market === "TW") return `TWSE:${ticker}`;
+  if (market === "CN_SH") return `SSE:${ticker}`;
+  if (market === "CN_SZ") return `SZSE:${ticker}`;
+  // US - use exchange directly
+  const exMap = { NASDAQ: "NASDAQ", NYSE: "NYSE", AMEX: "AMEX" };
+  const prefix = exMap[exchange] || "NASDAQ";
   return `${prefix}:${ticker}`;
 }
 
