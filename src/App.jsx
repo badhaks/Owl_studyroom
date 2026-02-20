@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 
 // Alpha Vantage: fetch real-time price for a ticker
 // For KR stocks use ticker like "005930.KS" (Samsung)
@@ -139,7 +139,7 @@ function getTVSymbol(ticker, market, exchange) {
 }
 
 function TradingViewWidget({ ticker, market, exchange }) {
-  const ref = React.useRef(null);
+  const ref = useRef(null);
   const symbol = getTVSymbol(ticker, market, exchange);
   useEffect(() => {
     if (!ref.current) return;
