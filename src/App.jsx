@@ -663,12 +663,85 @@ function PriceEditor({ stock, currentPrice, onSave, currency, onRefresh, refresh
   );
 }
 
+async function parseAnalysisWithAI(text) {
+  const prompt = `아래는 주식 분석 텍스트야. 이걸 읽고 JSON 형식으로만 응답해. 다른 설명 없이 JSON만 출력해.
+
+분석 텍스트:
+${text}
+
+아래 JSON 구조로 추출해. 없는 정보는 빈 문자열이나 빈 배열로:
+{
+  "ticker": "티커심볼",
+  "name": "회사명",
+  "market": "US 또는 KR",
+  "exchange": "NASDAQ/NYSE/KOSPI/KOSDAQ 등",
+  "sector": "섹터",
+  "currentPrice": 숫자,
+  "fairValue": 숫자,
+  "currency": "USD 또는 KRW",
+  "verdict": "투자의견 텍스트",
+  "verdictType": "buy/hold/sell/watch 중 하나",
+  "oneLiner": "한줄 투자의견",
+  "narrative": "내러티브 전체 텍스트",
+  "keyPoints": [{"num":1,"label":"레이블","content":"내용"}, ...],
+  "dealRadar": "딜레이더 내용",
+  "scenarios": [
+    {"type":"Bull","prob":숫자,"price":숫자,"color":"#00d27a"},
+    {"type":"Base","prob":숫자,"price":숫자,"color":"#f5a623"},
+    {"type":"Bear","prob":숫자,"price":숫자,"color":"#e74c3c"}
+  ],
+  "weightedFV": 숫자,
+  "events": [{"event":"이벤트명","impact":"+X% 또는 -X%","direction":"up 또는 down"}, ...],
+  "assumptions": [{"item":"항목","value":"값","basis":"근거","sensitivity":"민감도"}, ...],
+  "sources": ["출처1", "출처2"],
+  "updatedAt": "YYYY-MM-DD"
+}`;
+
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 1000,
+      messages: [{ role: "user", content: prompt }]
+    })
+  });
+  const data = await res.json();
+  const raw = data.content?.[0]?.text || "";
+  const clean = raw.replace(/```json|```/g, "").trim();
+  return JSON.parse(clean);
+}
+
 function StockForm({ stock, isEdit, onSave, onCancel }) {
   const [form, setForm] = useState(stock);
   const [kpText, setKpText] = useState(stock.keyPoints.map(k => `${k.label}: ${k.content}`).join("\n"));
   const [sourcesText, setSourcesText] = useState(stock.sources.join(", "));
   const [eventsText, setEventsText] = useState(stock.events.map(e => `${e.event}|${e.impact}|${e.direction}`).join("\n"));
   const [assText, setAssText] = useState(stock.assumptions.map(a => `${a.item}|${a.value}|${a.basis}|${a.sensitivity}`).join("\n"));
+  const [pasteText, setPasteText] = useState("");
+  const [parsing, setParsing] = useState(false);
+  const [parseError, setParseError] = useState("");
+  const [parseSuccess, setParseSuccess] = useState(false);
+
+  const handleAutoParse = async () => {
+    if (!pasteText.trim()) return;
+    setParsing(true);
+    setParseError("");
+    setParseSuccess(false);
+    try {
+      const parsed = await parseAnalysisWithAI(pasteText);
+      setForm(f => ({ ...f, ...parsed, id: f.id }));
+      setKpText((parsed.keyPoints || []).map(k => `${k.label}: ${k.content}`).join("\n"));
+      setSourcesText((parsed.sources || []).join(", "));
+      setEventsText((parsed.events || []).map(e => `${e.event}|${e.impact}|${e.direction}`).join("\n"));
+      setAssText((parsed.assumptions || []).map(a => `${a.item}|${a.value}|${a.basis}|${a.sensitivity}`).join("\n"));
+      setParseSuccess(true);
+      setPasteText("");
+    } catch (e) {
+      setParseError("파싱 실패. 분석 텍스트를 다시 확인해주세요.");
+    }
+    setParsing(false);
+  };
 
   const set = (key, val) => setForm(f => ({ ...f, [key]: val }));
   const setScenario = (i, key, val) => setForm(f => {
@@ -713,6 +786,33 @@ function StockForm({ stock, isEdit, onSave, onCancel }) {
         <div style={{ display: "flex", gap: 8 }}>
           <button className="btn-gold" onClick={handleSave}>SAVE</button>
           <button className="btn-ghost" onClick={onCancel}>CANCEL</button>
+        </div>
+      </div>
+
+      {/* AI AUTO PARSE BOX */}
+      <div className="card" style={{ padding: 24, marginBottom: 20, borderLeft: "3px solid #f5a623", background: "#0f1420" }}>
+        <div className="section-label" style={{ fontSize: 11 }}>🤖 AI 자동 파싱 — Grok 분석 텍스트 붙여넣기</div>
+        <p style={{ fontSize: 12, color: "#8899aa", marginBottom: 12, lineHeight: 1.7 }}>
+          Grok에서 분석한 텍스트를 아래에 붙여넣으면 AI가 자동으로 모든 항목을 채워줘요!
+        </p>
+        <textarea
+          value={pasteText}
+          onChange={e => setPasteText(e.target.value)}
+          rows={6}
+          placeholder={"여기에 Grok 분석 텍스트 전체를 붙여넣기 하세요...\n\nT1 ENERGY\nU.S. Domestic Solar & Battery Supply Chain\n[NASDAQ: TE]\n$6.46 ..."}
+          style={{ width: "100%", marginBottom: 10, resize: "vertical", borderColor: pasteText ? "#f5a623" : "#1e2535" }}
+        />
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <button
+            className="btn-gold"
+            onClick={handleAutoParse}
+            disabled={parsing || !pasteText.trim()}
+            style={{ opacity: parsing || !pasteText.trim() ? 0.5 : 1, fontSize: 13, padding: "10px 24px" }}
+          >
+            {parsing ? "⟳ AI 분석중..." : "✨ 자동으로 채우기"}
+          </button>
+          {parseSuccess && <span style={{ color: "#00d27a", fontSize: 12 }}>✓ 완료! 아래 내용을 확인 후 SAVE 하세요</span>}
+          {parseError && <span style={{ color: "#e74c3c", fontSize: 12 }}>✗ {parseError}</span>}
         </div>
       </div>
 
