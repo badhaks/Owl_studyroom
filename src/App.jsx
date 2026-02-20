@@ -1645,7 +1645,7 @@ function ConsensusSection({ ticker, market, ourFairValue, currentPrice, currency
   }, [ticker]);
 
   const fetchConsensus = async () => {
-    setLoading(true);
+    setLoading(true); setLoaded(false);
     try {
       const res = await fetch("/api/consensus", {
         method: "POST",
@@ -1653,75 +1653,128 @@ function ConsensusSection({ ticker, market, ourFairValue, currentPrice, currency
         body: JSON.stringify({ ticker }),
       });
       const d = await res.json();
-      setData(d);
+      setData(d.error ? null : d);
     } catch {}
-    setLoading(false);
-    setLoaded(true);
+    setLoading(false); setLoaded(true);
   };
 
   if (market !== "KR") return null;
 
-  const ourUpside = ourFairValue && currentPrice
-    ? (((ourFairValue - currentPrice) / currentPrice) * 100).toFixed(1)
-    : null;
-  const consUpside = data?.upsideVsConsensus;
-  const diff = ourUpside && consUpside
-    ? (parseFloat(ourUpside) - parseFloat(consUpside)).toFixed(1)
-    : null;
+  // ── 기준가: API에서 받은 현재가 우선, 없으면 저장된 현재가 ──
+  const basePrice = data?.currentPrice || currentPrice;
+
+  // 우리 적정가 업사이드 (같은 기준가로 계산)
+  const ourUpside = ourFairValue && basePrice
+    ? (((ourFairValue - basePrice) / basePrice) * 100).toFixed(1) : null;
+
+  // 컨센서스 목표가 업사이드 (같은 기준가로 계산 — API의 upsideVsConsensus 덮어씀)
+  const consTP = data?.consensusTargetPrice;
+  const consUpside = consTP && basePrice
+    ? (((consTP - basePrice) / basePrice) * 100).toFixed(1) : null;
+
+  // 괴리율: 우리 적정가 vs 컨센서스 목표가 직접 비교
+  const tpDiff = ourFairValue && consTP
+    ? (((ourFairValue - consTP) / consTP) * 100).toFixed(1) : null;
+
+  const hasData = data && (consTP || (data.recentReports?.length > 0));
 
   return (
-    <div className="card" style={{ padding: "20px", marginBottom: 16 }}>
+    <div className="card" style={{ padding: 20, marginBottom: 16 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
         <div>
-          <div className="section-label" style={{ margin: 0 }}>📊 컨센서스 비교</div>
-          {data?.fetchedAt && <div style={{ fontSize: 9, color: "#556677", marginTop: 2 }}>네이버 금융 기준 · {data.fetchedAt}</div>}
+          <div className="section-label" style={{ margin: 0 }}>📊 증권사 컨센서스</div>
+          {data?.fetchedAt && (
+            <div style={{ fontSize: 9, color: "#556677", marginTop: 2 }}>
+              {data.source || "네이버 금융"} · {data.fetchedAt}
+            </div>
+          )}
         </div>
-        <button className="btn-outline" style={{ fontSize: 10, padding: "4px 12px" }} onClick={fetchConsensus} disabled={loading}>
+        <button className="btn-outline" style={{ fontSize: 10, padding: "4px 12px" }}
+          onClick={fetchConsensus} disabled={loading}>
           {loading ? "⟳" : "⟳ 새로고침"}
         </button>
       </div>
 
-      {loading && <div style={{ fontSize: 12, color: "#f5a623", textAlign: "center", padding: "16px 0" }}>⟳ 컨센서스 데이터 수집 중...</div>}
+      {loading && (
+        <div style={{ fontSize: 12, color: "#f5a623", textAlign: "center", padding: "16px 0" }}>
+          ⟳ 컨센서스 데이터 수집 중...
+        </div>
+      )}
 
-      {loaded && data && !data.error && (
+      {loaded && !hasData && (
+        <div style={{ fontSize: 11, color: "#556677", textAlign: "center", padding: "12px 0" }}>
+          컨센서스 데이터 없음 ·{" "}
+          <a href={`https://finance.naver.com/research/company_list.naver?code=${String(ticker).padStart(6,"0")}`}
+            target="_blank" rel="noreferrer" style={{ color: "#f5a623" }}>
+            네이버 금융에서 확인 →
+          </a>
+        </div>
+      )}
+
+      {loaded && hasData && (
         <>
-          {/* 목표가 비교 */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 16 }}>
-            <div style={{ background: "#0a0d14", borderRadius: 6, padding: "12px 14px", border: "1px solid #9b59b644" }}>
-              <div style={{ fontSize: 9, color: "#9b59b6", letterSpacing: 1, marginBottom: 4 }}>우리 적정가</div>
-              <div style={{ fontSize: 18, fontWeight: 500, color: "#f5a623" }}>{ourFairValue ? ourFairValue.toLocaleString() : "—"}</div>
-              <div style={{ fontSize: 10, color: ourUpside ? (parseFloat(ourUpside) > 0 ? "#00d27a" : "#e74c3c") : "#556677" }}>
-                {ourUpside ? `${parseFloat(ourUpside) > 0 ? "+" : ""}${ourUpside}%` : "—"}
+          {/* ── 목표가 3단 비교 ── */}
+          {consTP && (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 16 }}>
+              {/* 우리 적정가 */}
+              <div style={{ background: "#0a0d14", borderRadius: 6, padding: "12px 14px", border: "1px solid #9b59b644" }}>
+                <div style={{ fontSize: 9, color: "#9b59b6", letterSpacing: 1, marginBottom: 6 }}>우리 적정가</div>
+                <div style={{ fontSize: 17, fontWeight: 600, color: "#f5a623" }}>
+                  {ourFairValue ? ourFairValue.toLocaleString() : "—"}원
+                </div>
+                <div style={{ fontSize: 10, marginTop: 3, color: ourUpside ? (parseFloat(ourUpside) > 0 ? "#00d27a" : "#e74c3c") : "#556677" }}>
+                  {ourUpside ? `현재가 대비 ${parseFloat(ourUpside) > 0 ? "+" : ""}${ourUpside}%` : "—"}
+                </div>
+              </div>
+              {/* 컨센서스 목표가 */}
+              <div style={{ background: "#0a0d14", borderRadius: 6, padding: "12px 14px", border: "1px solid #3498db44" }}>
+                <div style={{ fontSize: 9, color: "#3498db", letterSpacing: 1, marginBottom: 6 }}>
+                  컨센서스 목표가
+                  {data.analystCount && <span style={{ marginLeft: 4, color: "#556677" }}>({data.analystCount}개사)</span>}
+                </div>
+                <div style={{ fontSize: 17, fontWeight: 600, color: "#e8eaf6" }}>
+                  {consTP.toLocaleString()}원
+                </div>
+                <div style={{ fontSize: 10, marginTop: 3, color: consUpside ? (parseFloat(consUpside) > 0 ? "#00d27a" : "#e74c3c") : "#556677" }}>
+                  {consUpside ? `현재가 대비 ${parseFloat(consUpside) > 0 ? "+" : ""}${consUpside}%` : "—"}
+                </div>
+              </div>
+              {/* 우리 vs 컨센서스 괴리 */}
+              <div style={{ background: "#0a0d14", borderRadius: 6, padding: "12px 14px", border: "1px solid #1e2535" }}>
+                <div style={{ fontSize: 9, color: "#556677", letterSpacing: 1, marginBottom: 6 }}>우리 vs 컨센서스</div>
+                <div style={{ fontSize: 17, fontWeight: 600, color: tpDiff ? (parseFloat(tpDiff) > 0 ? "#00d27a" : "#e74c3c") : "#556677" }}>
+                  {tpDiff ? `${parseFloat(tpDiff) > 0 ? "+" : ""}${tpDiff}%` : "—"}
+                </div>
+                <div style={{ fontSize: 10, marginTop: 3, color: "#556677" }}>
+                  {tpDiff ? (parseFloat(tpDiff) > 0 ? "우리가 더 낙관적" : "우리가 더 보수적") : ""}
+                </div>
               </div>
             </div>
-            <div style={{ background: "#0a0d14", borderRadius: 6, padding: "12px 14px", border: "1px solid #3498db44" }}>
-              <div style={{ fontSize: 9, color: "#3498db", letterSpacing: 1, marginBottom: 4 }}>컨센서스</div>
-              <div style={{ fontSize: 18, fontWeight: 500, color: "#e8eaf6" }}>{data.consensusTargetPrice ? data.consensusTargetPrice.toLocaleString() : "—"}</div>
-              <div style={{ fontSize: 10, color: consUpside ? (parseFloat(consUpside) > 0 ? "#00d27a" : "#e74c3c") : "#556677" }}>
-                {consUpside ? `${parseFloat(consUpside) > 0 ? "+" : ""}${consUpside}%` : "—"}
-              </div>
-            </div>
-            <div style={{ background: "#0a0d14", borderRadius: 6, padding: "12px 14px", border: "1px solid #1e2535" }}>
-              <div style={{ fontSize: 9, color: "#556677", letterSpacing: 1, marginBottom: 4 }}>괴리율</div>
-              <div style={{ fontSize: 18, fontWeight: 500, color: diff ? (parseFloat(diff) > 0 ? "#00d27a" : "#e74c3c") : "#556677" }}>
-                {diff ? `${parseFloat(diff) > 0 ? "+" : ""}${diff}%p` : "—"}
-              </div>
-              <div style={{ fontSize: 10, color: "#556677" }}>
-                {diff ? (parseFloat(diff) > 0 ? "우리가 더 낙관적" : "우리가 더 보수적") : ""}
-              </div>
-            </div>
-          </div>
+          )}
 
-          {/* 투자의견 분포 */}
-          {data.opinions.total > 0 && (
+          {/* ── 현재가 기준 표시 ── */}
+          {basePrice && (
+            <div style={{ fontSize: 10, color: "#556677", marginBottom: 12 }}>
+              기준 현재가: <span style={{ color: "#e8eaf6" }}>{basePrice.toLocaleString()}원</span>
+              {data?.currentPrice && data.currentPrice !== currentPrice && (
+                <span style={{ color: "#f5a623", marginLeft: 6 }}>· 네이버 실시간가 기준</span>
+              )}
+            </div>
+          )}
+
+          {/* ── 투자의견 분포 ── */}
+          {data.opinions?.total > 0 && (
             <div style={{ marginBottom: 16 }}>
               <div style={{ fontSize: 10, color: "#556677", marginBottom: 8 }}>
-                투자의견 분포 · {data.analystCount}개 증권사 커버
+                투자의견 분포
               </div>
-              <div style={{ display: "flex", height: 8, borderRadius: 4, overflow: "hidden", gap: 2, marginBottom: 6 }}>
-                {data.opinions.buyPct > 0 && <div style={{ flex: parseInt(data.opinions.buyPct), background: "#00d27a" }} />}
-                {data.opinions.holdPct > 0 && <div style={{ flex: parseInt(data.opinions.holdPct), background: "#f5a623" }} />}
-                {data.opinions.sellPct > 0 && <div style={{ flex: parseInt(data.opinions.sellPct), background: "#e74c3c" }} />}
+              <div style={{ display: "flex", height: 8, borderRadius: 4, overflow: "hidden", marginBottom: 6 }}>
+                {parseFloat(data.opinions.buyPct) > 0 &&
+                  <div style={{ flex: parseFloat(data.opinions.buyPct), background: "#00d27a" }} />}
+                {parseFloat(data.opinions.holdPct) > 0 &&
+                  <div style={{ flex: parseFloat(data.opinions.holdPct), background: "#f5a623" }} />}
+                {parseFloat(data.opinions.sellPct) > 0 &&
+                  <div style={{ flex: parseFloat(data.opinions.sellPct), background: "#e74c3c" }} />}
               </div>
               <div style={{ display: "flex", gap: 16, fontSize: 10 }}>
                 <span style={{ color: "#00d27a" }}>▲ 매수 {data.opinions.buy}개 ({data.opinions.buyPct}%)</span>
@@ -1731,42 +1784,38 @@ function ConsensusSection({ ticker, market, ourFairValue, currentPrice, currency
             </div>
           )}
 
-          {/* 최근 리포트 */}
+          {/* ── 최근 리포트 ── */}
           {data.recentReports?.length > 0 && (
             <div>
               <div style={{ fontSize: 10, color: "#556677", letterSpacing: 1, marginBottom: 8 }}>최근 증권사 리포트</div>
               {data.recentReports.map((r, i) => (
                 <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: "1px solid #1e253533" }}>
-                  <div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
                     <span style={{ fontSize: 11, color: "#e8eaf6", fontWeight: 500 }}>{r.broker}</span>
-                    {r.title && <span style={{ fontSize: 10, color: "#556677", marginLeft: 8 }}>{r.title.slice(0, 30)}{r.title.length > 30 ? "..." : ""}</span>}
+                    {r.title && (
+                      <span style={{ fontSize: 10, color: "#556677", marginLeft: 8 }}>
+                        {r.title.slice(0, 25)}{r.title.length > 25 ? "..." : ""}
+                      </span>
+                    )}
                   </div>
-                  <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                  <div style={{ display: "flex", gap: 10, alignItems: "center", flexShrink: 0 }}>
                     {r.opinion && (
-                      <span style={{ fontSize: 10, color: r.opinion.includes("매수") || r.opinion === "Buy" ? "#00d27a" : r.opinion.includes("매도") || r.opinion === "Sell" ? "#e74c3c" : "#f5a623" }}>
+                      <span style={{ fontSize: 10, fontWeight: 500,
+                        color: ["매수","Buy","BUY","Outperform"].includes(r.opinion) ? "#00d27a"
+                          : ["매도","Sell","SELL"].includes(r.opinion) ? "#e74c3c" : "#f5a623" }}>
                         {r.opinion}
                       </span>
                     )}
-                    {r.targetPrice && <span style={{ fontSize: 11, color: "#f5a623" }}>{r.targetPrice.toLocaleString()}원</span>}
+                    {r.targetPrice && (
+                      <span style={{ fontSize: 11, color: "#f5a623" }}>{r.targetPrice.toLocaleString()}원</span>
+                    )}
                     <span style={{ fontSize: 9, color: "#556677" }}>{r.date}</span>
                   </div>
                 </div>
               ))}
             </div>
           )}
-
-          {data.recentReports?.length === 0 && (
-            <div style={{ fontSize: 11, color: "#556677", textAlign: "center", padding: "8px 0" }}>
-              최근 리포트 없음 · <a href={`https://finance.naver.com/research/company_list.naver?code=${ticker.padStart(6,"0")}`} target="_blank" rel="noreferrer" style={{ color: "#f5a623" }}>네이버 금융에서 확인 →</a>
-            </div>
-          )}
         </>
-      )}
-
-      {loaded && data?.error && (
-        <div style={{ fontSize: 11, color: "#556677" }}>
-          데이터를 불러오지 못했어요. <a href={`https://finance.naver.com/item/main.naver?code=${ticker.padStart(6,"0")}`} target="_blank" rel="noreferrer" style={{ color: "#f5a623" }}>네이버 금융에서 직접 확인 →</a>
-        </div>
       )}
     </div>
   );
